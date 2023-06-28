@@ -1,0 +1,159 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+#opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 14
+plan("multiprocess", workers = N_WORKERS)
+```
+
+
+
+
+```{r}
+
+filename <- "./data/schiller_data/converted_seurat_obj.rds"
+filename2 <- "./data/schiller_data/converted_seurat_obj_essential.rds"
+if (!file.exists(filename)) { # Create if doesn't exist
+  Convert("./data/schiller_data/EpiHiRes.h5ad", dest = "h5seurat", overwrite = TRUE)
+  schiller_robj <- LoadH5Seurat("./data/schiller_data/EpiHiRes.h5seurat")
+  saveRDS(schiller_robj, filename, compress = "bzip2")
+
+  DefaultAssay(schiller_robj) <- "matrix"
+  schiller_obj_essential <- DietSeurat(schiller_robj,
+                                       scale.data = TRUE,
+                                       dimreducs = c("pca", "umap", "velocity_umap"),
+                                       graphs = "RNA_umap",
+                                       assays = c("matrix"))
+  schiller_obj_essential <- RenameAssays(schiller_obj_essential, matrix = "RNA")
+
+  reticulate::use_python("/mnt/nfs/home/nick/miniconda3/envs/r_411_injury/bin/python")
+  schiller_anndata <- anndata::read_h5ad("./data/schiller_data/EpiHiRes.h5ad")
+
+  schiller_obj_essential <- UpdateSeuratObject(schiller_obj_essential)
+
+
+  for (meta_name in colnames(schiller_anndata$obs)){
+    schiller_obj_essential[[meta_name]] <- schiller_anndata$obs[[meta_name]]
+  }
+
+  schiller_obj_recreate <- CreateSeuratObject(GetAssayData(schiller_obj_essential), project = "schiller", meta.data = schiller_obj_essential@meta.data)
+  schiller_obj_recreate@reductions <- schiller_obj_essential@reductions
+  schiller_obj_essential <- schiller_obj_recreate
+
+  saveRDS(schiller_obj_essential, filename2, compress = "bzip2")
+} else {
+  schiller_obj_essential <- readRDS(filename2)
+}
+
+```
+
+```{r}
+DimPlot(schiller_obj_essential, group.by = "cell_type_recombined")
+FeaturePlot(schiller_obj_essential, features = "Krt8")
+```
+
+```{r}
+
+plosa_epi_D21 <- readRDS("./data/b1/D21_no_cd45_epi_sct.rds")
+plosa_epi_D21$lab <- "plosa"
+DefaultAssay(plosa_epi_D21) <- "RAW_COUNTS"
+plosa_epi_D21 <- DietSeurat(plosa_epi_D21, assays = "RAW_COUNTS")
+plosa_epi_D21 <- RenameAssays(plosa_epi_D21, RAW_COUNTS = "RNA")
+
+```
+
+
+```{r}
+schiller_obj_essential$lab <- "schiller"
+merged_data <- merge(DietSeurat(schiller_obj_essential, assays = "RNA"), plosa_epi_D21)
+
+
+```
+
+
+# Try SCT Integration workflow
+```{r}
+epi_data_list <- SplitObject(merged_data, split.by = "lab")
+epi_data_list <- lapply(X = epi_data_list, FUN = SCTransform)
+features <- SelectIntegrationFeatures(object.list = epi_data_list, nfeatures = 2000)
+epi_data_list <- PrepSCTIntegration(object.list = epi_data_list, anchor.features = features)
+epi_anchors <- FindIntegrationAnchors(object.list = epi_data_list, normalization.method = "SCT",
+                                      anchor.features = features)
+epi_data_combined_all <- IntegrateData(anchorset = epi_anchors, normalization.method = "SCT")
+```
+
+
+```{r}
+epi_data_combined_all <- cluster_pca_umap(epi_data_combined_all, dims_umap = 1:25, dims_neighbors = 1:25, cluster_res = 1.2)
+
+```
+
+```{r}
+saveRDS(epi_data_combined_all, "./data/b1/20211216_schiller_plosa_integrated_D21.rds", compress = "bzip2")
+```
+
+```{r}
+a <- DimPlot(epi_data_combined_all, group.by = "lab")
+b <- DimPlot(epi_data_combined_all, group.by = "cell_type_recombined")
+c <- DimPlot(epi_data_combined_all, group.by = "genotype")
+d <- DimPlot(epi_data_combined_all, group.by = "injury")
+fplt <- FeaturePlot(epi_data_combined_all, c("Fbln5", "Ager", "Top2a", "Fn1", "Pdgfb"))
+a + b + c + d & theme(aspect.ratio = 1)
+fplt
+ggsave("./data/b1/figures/prelim_schiller/all_yesintegration_D21.png", a + b + c + d & theme(aspect.ratio = 1), scale = 1.5)
+ggsave("./data/b1/figures/prelim_schiller/all_gex_yesintegration_D21.png", fplt & theme(aspect.ratio = 1), scale = 1.5)
+
+```
+
+```{r}
+DimPlot(epi_data_combined_all, group.by = "cell_type_recombined", label = TRUE)
+```
+
+```{r}
+plosa_epi_original_D21 <- readRDS("./data/b1/D21_no_cd45_epi_sct.rds")
+```
+
+```{r}
+epi_data_list$schiller <- cluster_pca_umap(epi_data_list$schiller, dims_umap = 1:25, dims_neighbors = 1:25, cluster_res = 1.2)
+
+
+transfer_anchors <- FindTransferAnchors(reference = epi_data_list$schiller, query = plosa_epi_original_D21,
+                                        dims = 1:30, reference.reduction = "pca", normalization.method = "SCT")
+predictions <- TransferData(anchorset = transfer_anchors, refdata = epi_data_list$schiller$cell_type_recombined,
+                            dims = 1:30)
+plosa_epi_original_D21 <- AddMetaData(plosa_epi_original_D21, metadata = predictions)
+
+```
+
+```{r}
+DimPlot(plosa_epi_original_D21, group.by = "predicted.id")
+```
+
+```{r}
+DimPlot(subset(plosa_epi_original_D21, genotype == "B1"), group.by = "predicted.id")
+```
+```{r}
+DimPlot(subset(plosa_epi_original_D21, genotype == "WT"), group.by = "predicted.id")
+```
+```{r}
+saveRDS(plosa_epi_original_D21, "./data/b1/D21_b1_labeled_epithelium_lab_transfer.rds", compress = "bzip2")
+```

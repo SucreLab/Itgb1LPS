@@ -1,0 +1,82 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 1/19/22
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+#opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 14
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data_combined_all <- readRDS("./data/b1/20211216_schiller_plosa_integrated.rds")
+plosa_epi_w_transfer_D7 <- readRDS("./data/b1/b1_labeled_epithelium_lab_transfer.rds")
+plosa_epi_original_D21 <- readRDS("./data/b1/D21_b1_labeled_epithelium_lab_transfer.rds")
+
+plosa_epi_original_D21_at2adi_sub <- subset(plosa_epi_original_D21, predicted.id %in% c("activated AT2", "AT2 cells", "Krt8 ADI"))
+```
+
+
+```{r}
+plosa_epi_original_D21_at2adi_sub$celltype_genotype <- paste0(plosa_epi_original_D21_at2adi_sub$predicted.id,
+                                                              " ", plosa_epi_original_D21_at2adi_sub$genotype)
+```
+
+```{r}
+genes <- c("Sftpc", "Sftpa1", "Abca3", "Aqp5", "Ager", "Pdpn", "Rtkn2", "Hopx", "Col4a3", "Fbln5", "Krt8", "Hbegf", "Areg")
+```
+
+```{r}
+VlnPlot(plosa_epi_original_D21_at2adi_sub, group.by = "celltype_genotype", features = "Hopx", assay = "RNA")
+```
+
+```{r}
+cell_order <- c("AT2 cells WT", "activated AT2 WT", "Krt8 ADI WT", "AT2 cells iKO", "activated AT2 iKO", "Krt8 ADI iKO")
+```
+
+```{r}
+markers_D21_cells_plot <- DotPlot(plosa_epi_original_D21_at2adi_sub, group.by = "celltype_genotype", features = genes, dot.scale = 10,
+                                  assay = "SCT") +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("D21 cells") +
+        scale_y_discrete(limits = rev(cell_order))
+
+markers_D21_cells_plot
+
+ggsave("./data/b1/figures/dotplot_D21_multicelltype.pdf", markers_D21_cells_plot, width = 9, height = 4)
+ggsave("./data/b1/figures/dotplot_D21_multicelltype.png", markers_D21_cells_plot, width = 9, height = 4, dpi = 600)
+ggsave("./data/b1/figures/dotplot_D21_multicelltype.tiff", markers_D21_cells_plot, width = 9, height = 4, dpi = 600, compression = "lzw")
+```
+
+```{r}
+DoHeatmap(plosa_epi_original_D21_at2adi_sub, features = genes, group.by = "celltype_genotype")
+```
+
+```{r}
+markers_D21_cells_plot <- DotPlot(plosa_epi_original_D21_at2adi_sub, group.by = "celltype_genotype", features = genes, dot.scale = 10,
+                                  assay = "SCT") +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("D21 cells")
+markers_D21_cells_plot
+```

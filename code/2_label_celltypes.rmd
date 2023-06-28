@@ -1,0 +1,230 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+#renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 4
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+EP_LPS_data <- readRDS("./data/b1/b1_noCd45_sct.rds")
+```
+
+```{r}
+DimPlot(EP_LPS_data, group.by = "injury")
+```
+
+```{r}
+marker_genes <- c("Epcam",
+                  "Sftpa1", "Sftpc", # AT2
+                  "Hopx", "Aqp5", "Col4a3", "Ager", #AT1
+                  "Foxj1", "Dynlrb2", # Cilliated
+                  "Mdk", "Mki67", # Primordial
+                  "Scgb1a1", "Scgb3a2", # Secretory
+                  "Cdkn1a", "Cldn4", # Transitional?
+                  "Ascl1", "Scg5", #Neuroendocrine
+                  "Pecam1",
+                  "Gpihbp1", "Kit", # Microvascular
+                  "Car4", "Kdr", # Car4
+                  "Top2a", # Proliferating miEC
+                  "Vwf", "Vcam1", #macrovascular
+                  "Vegfc", "Prss23", #Venous macrovascular
+                  "Cxcl12", "Pcsk5", #Artearial macrovascular
+                  "Ephb4", # Vein
+                  "Flt4", "Ccl21a", # Lymphatic
+                  "Wnt2", "Macf1", # Wnt2 fibroblasts 0
+                  "Tgfbi", "Wnt5a", # Myofibroblasts 1
+                  "Dcn", "Col1a1", # Adventitial fibroblast 2
+                  "Cspg4", "Cox4i2", # Pericyte 4
+                  "Ednrb", "Pdgfra", # Prenatal myo 5
+                  "Wt1", "Upk3b", # Mesothelium 6
+                  "Eln", "Acta2", # Smooth muscle 7
+                  "Mpz", "Mal", # Neuron 8
+                  "Tnnt2", "Actc1", # Cardiomyocyte
+                  "Ptprc"
+)
+DotPlot(EP_LPS_data, features = marker_genes) + theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+
+```{r}
+EP_LPS_data_relabel <- EP_LPS_data
+EP_LPS_data_relabel$louvain <- Idents(EP_LPS_data_relabel)
+EP_LPS_data_relabel$bulk_celltype <- Idents(EP_LPS_data_relabel)
+
+idxes <- levels(EP_LPS_data_relabel$bulk_celltype)
+labels <- rep("Endothelium", length(levels(EP_LPS_data_relabel$bulk_celltype)))
+
+labels[idxes %in% c(14, 25, 27, 33)] <- "Epithelium"
+labels[idxes %in% c(1, 17, 31, 39)] <- "Mesenchyme"
+
+labels
+
+levels(EP_LPS_data_relabel$bulk_celltype) <- labels
+
+```
+
+# Recover epithelial cells that were misattributed to the endothelium or mesenchyme
+
+```{r}
+DimPlot(EP_LPS_data_relabel, label = TRUE) + umap_theme()
+DimPlot(EP_LPS_data_relabel, group.by = "bulk_celltype") + umap_theme()
+```
+
+```{r}
+data_epi_prelim <- subset(EP_LPS_data_relabel, bulk_celltype == "Epithelium")
+data_endo_prelim <- subset(EP_LPS_data_relabel, bulk_celltype == "Endothelium")
+data_meso_prelim <- subset(EP_LPS_data_relabel, bulk_celltype == "Mesenchyme")
+```
+
+
+```{r}
+plan("multiprocess", workers = N_WORKERS)
+data_epi_prelim <- SCTransform(data_epi_prelim, variable.features.n = 2000,
+                           conserve.memory = TRUE, batch_var = "orig.ident",
+                           vars.to.regress = c("percent.mt"),
+                           method = 'glmGamPoi')
+data_epi_prelim <- cluster_pca_umap(data_epi_prelim, dims_umap = 1:15, dims_neighbors = 1:15, cluster_res = 0.6)
+data_endo_prelim <- SCTransform(data_endo_prelim, variable.features.n = 2000,
+                               conserve.memory = TRUE, batch_var = "orig.ident",
+                               vars.to.regress = c("percent.mt"),
+                               method = 'glmGamPoi')
+data_endo_prelim <- cluster_pca_umap(data_endo_prelim, dims_umap = 1:15, dims_neighbors = 1:15, cluster_res = 0.6)
+data_meso_prelim <- SCTransform(data_meso_prelim, variable.features.n = 2000,
+                               conserve.memory = TRUE, batch_var = "orig.ident",
+                               vars.to.regress = c("percent.mt"),
+                               method = 'glmGamPoi')
+data_meso_prelim <- cluster_pca_umap(data_meso_prelim, dims_umap = 1:25, dims_neighbors = 1:25, cluster_res = 0.6)
+```
+
+```{r}
+data_epi_prelim <- cluster_pca_umap(data_epi_prelim, dims_umap = 1:15, dims_neighbors = 1:15, cluster_res = 0.6)
+data_endo_prelim <- cluster_pca_umap(data_endo_prelim, dims_umap = 1:35, dims_neighbors = 1:35, cluster_res = 2, umap_neighbors = 15, k_param = 5)
+data_meso_prelim <- cluster_pca_umap(data_meso_prelim, dims_umap = 1:35, dims_neighbors = 1:35, cluster_res = 3, umap_neighbors = 15, k_param = 5)
+```
+
+```{r}
+DimPlot(data_epi_prelim)
+FeaturePlot(data_epi_prelim, c("Pdpn", "Ager", "Epcam", "Col4a3"))
+DimPlot(data_endo_prelim)
+FeaturePlot(data_endo_prelim, c("Pdpn", "Ager", "Epcam", "Col4a3"))
+DimPlot(data_meso_prelim)
+FeaturePlot(data_meso_prelim, c("Pdpn", "Ager", "Epcam", "Col4a3"))
+```
+
+```{r}
+DotPlot(data_endo_prelim, features = marker_genes) + theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+```{r}
+data_endo_prelim_possible_epi <- subset(data_endo_prelim, idents = c(46, 52, 65))
+data_endo_prelim_possible_epi <- cluster_pca_umap(data_endo_prelim_possible_epi, dims_umap = 1:35, dims_neighbors = 1:35, cluster_res = 1, k_param = 5)
+DimPlot(data_endo_prelim_possible_epi, label = TRUE)
+FeaturePlot(data_endo_prelim_possible_epi, c("Pdpn", "Ager", "Epcam", "Col4a3"))
+DotPlot(data_endo_prelim_possible_epi, features = marker_genes) + theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+```{r}
+lost_epithelial_cells_endo <- colnames(data_endo_prelim_possible_epi)[Idents(data_endo_prelim_possible_epi) %in% c(1, 7, 8, 21)]
+```
+
+```{r}
+grep('^AACACGTAGAGGGATA', colnames(data_epi_prelim))
+grep('^GTTAAGCAGTGAACAT', colnames(data_epi_prelim))
+grep('^AGAATAGAGACCTTTG', colnames(data_epi_prelim))
+grep('^AGACGTTAGGCAGGTT', colnames(data_epi_prelim))
+grep('^AGCGTATTCTCCGGTT', colnames(data_epi_prelim))
+grep('^AGCTCTCAGTGTACCT', colnames(data_epi_prelim))
+grep('^GGATTACGTACCGCTG', colnames(data_epi_prelim))
+grep('^TGATTTCTCTCCGGTT', colnames(data_endo_prelim_possible_epi))
+grep('^TGCACCTAGTCTTGCA', colnames(data_endo_prelim_possible_epi))
+grep('^TGATTTCTCTCCGGTT', lost_epithelial_cells_endo)
+grep('^TGCACCTAGTCTTGCA', lost_epithelial_cells_endo)
+```
+
+```{r}
+DotPlot(data_meso_prelim, features = marker_genes) + theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+```{r}
+EP_LPS_data_relabel$bulk_celltype[lost_epithelial_cells_endo] <- "Epithelium"
+```
+
+
+
+
+```{r}
+celltypes_plt <- DimPlot(EP_LPS_data_relabel, group.by = "broad_celltype") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Cluster")
+
+subcelltypes_plt <- DimPlot(EP_LPS_data_relabel, group.by = "celltype") +
+        umap_theme() +
+        scale_colour_manual(values = color_category_20) +
+        ggtitle("Cluster")
+
+injury_plt <- DimPlot(EP_LPS_data_relabel, group.by = "injury") +
+        umap_theme() +
+        scale_colour_manual(values = color_scanpy_default) +
+        ggtitle("Treatment")
+
+genotype_plt <- DimPlot(EP_LPS_data_relabel, group.by = "genotype") +
+        umap_theme() +
+        scale_colour_manual(values = color_scanpy_default) +
+        ggtitle("Genotype")
+
+celltypes_plt + subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 2)
+ggsave("./data/b1/figures/UMAP.png", celltypes_plt + subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 2), scale = 1.8)
+```
+
+```{r}
+saveRDS(EP_LPS_data_relabel, "./data/b1/no_cd45_celltype_recluster2.rds", compress = "bzip2")
+```
+
+```{r}
+as.character(EP_LPS_data_relabel$bulk_celltype[grep('^AACACGTAGAGGGATA', colnames(EP_LPS_data_relabel))])
+as.character(EP_LPS_data_relabel$bulk_celltype[grep('^GTTAAGCAGTGAACAT', colnames(EP_LPS_data_relabel))])
+as.character(EP_LPS_data_relabel$bulk_celltype[grep('^AGAATAGAGACCTTTG', colnames(EP_LPS_data_relabel))])
+as.character(EP_LPS_data_relabel$bulk_celltype[grep('^AGACGTTAGGCAGGTT', colnames(EP_LPS_data_relabel))])
+as.character(EP_LPS_data_relabel$bulk_celltype[grep('^AGCGTATTCTCCGGTT', colnames(EP_LPS_data_relabel))])
+as.character(EP_LPS_data_relabel$bulk_celltype[grep('^AGCTCTCAGTGTACCT', colnames(EP_LPS_data_relabel))])
+as.character(EP_LPS_data_relabel$bulk_celltype[grep('^GGATTACGTACCGCTG', colnames(EP_LPS_data_relabel))])
+as.character(EP_LPS_data_relabel$bulk_celltype[grep('^TGATTTCTCTCCGGTT', colnames(EP_LPS_data_relabel))])
+as.character(EP_LPS_data_relabel$bulk_celltype[grep('^TGCACCTAGTCTTGCA', colnames(EP_LPS_data_relabel))])
+```
+
+
+```{r}
+vln_wt <- VlnPlot(subset(EP_LPS_data_relabel2, genotype == "WT"), group.by = c("broad_celltype"), "Itgb1")
+vln_ko <- VlnPlot(subset(EP_LPS_data_relabel2, genotype == "B1 KO"), group.by = c("broad_celltype"), "Itgb1")
+
+vln_wt + vln_ko
+```
+
+
+```{r}
+FeaturePlot(EP_LPS_data_relabel2, features = c("Pdpn", "Epcam", "Foxj1", "Aqp5", "Sftpc", "Sftpa1"))
+```
+
+
+

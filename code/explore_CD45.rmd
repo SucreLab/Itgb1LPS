@@ -1,0 +1,443 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_a3_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 4
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+#data_Cd45 <- EP_LPS_data_Cd45
+data_Cd45 <- readRDS("./data/b1/b1_Cd45_sct.rds")
+data_Cd45$guess_celltype <- Idents(data_Cd45)
+Idents(data_Cd45) <- data_Cd45$louvain
+
+saveRDS(data_Cd45, "./data/b1/b1_Cd45_sct.rds")
+VariableFeatures(data_Cd45)
+```
+
+```{r}
+DimPlot(data_Cd45, group.by = "injury")
+```
+
+```{r}
+plan("multiprocess", workers = N_WORKERS)
+filename <- "./data/b1/b1_Cd45_cluster_markers.rds"
+if (!file.exists(filename)) {
+  cd45_markers <- parallelFindAllMarkers(data_Cd45)
+  saveRDS(cd45_markers, filename)
+} else {
+  cd45_markers <- readRDS(filename)
+}
+```
+
+
+```{r}
+wb_cd45_markers_names <- levels(Idents(data_Cd45))
+
+wb_cd45_markers <- createWorkbook()
+for (idx in seq_along(cd45_markers)){
+  addWorksheet(wb_cd45_markers, wb_cd45_markers_names[idx])
+  writeData(wb_cd45_markers, wb_cd45_markers_names[idx], cd45_markers[[idx]], rowNames = TRUE)
+}
+saveWorkbook(wb_cd45_markers, file = "./data/b1/cd45_cluster_markers.xlsx", overwrite = TRUE)
+
+```
+
+```{r}
+DimPlot(data_Cd45, label = TRUE)
+DimPlot(data_Cd45, group.by = "injury")
+```
+
+```{r}
+FeaturePlot(data_Cd45, c("Il6","Ccl3","Cxcl10","Nos2"))
+FeaturePlot(data_Cd45, c("Arg1","Il10","Chil3","Ccl17","Mrc1"))
+```
+
+
+```{r}
+data_Cd45$louvain <- Idents(data_Cd45)
+data_Cd45$broad_celltype <- Idents(data_Cd45)
+levels(Idents(data_Cd45)) <- c("B-cell Cd19+", #0
+        "T-cell CD4+ Cd3e+", #1
+        "T-cell CD8+ Cd3e+", #2
+        "Mac/Dendritic Cd209a+", #3
+        "T-cell Cd3e+ Rps-hi", #4
+        "MoMacDC 1 Csfr1+", #5
+        "MoMacDC 2 Csfr1+", #6
+        "Low quality", #7
+        "M1 Mac Ccl3+ IL6+ ", #8
+        "NK Cell Ncr1+", #9
+        "Prolif Mki67+", #10
+        "Dendritic Clec9a+", #11
+        "Plasma cell Ihge+ Xbp1+", #12
+        "MoMacDC 4 Csfr1+", #13
+        "Neutrophil Csf3r+", #14
+        "Plasmacytoid dendritic cell Siglech+", #15
+        "Dendritic Clec9a+", #16
+        "T-cell 2 Cd3e+", #17
+        "Dendritic-Mature Tmem123+", #18
+        "M2 Mac Chil3+", #19
+        "Plasma cell Ighm+ Xbp1+", #20
+        "NK Cells Ncr1+", #21
+        "Trdv4+ Cd163l1+", #22
+        "Treg? Csf2+ Areg+", #23
+        "Endothelium", #24
+        "AT2", #25
+        "MoMacDC 5 Csfr1+" #26
+)
+
+levels(data_Cd45$broad_celltype) <- c("B-cell",
+                                      "T-cell",
+                                      "T-cell",
+                                      "MoMacDC",
+                                      "T-cell",
+                                      "MoMacDC",
+                                      "MoMacDC",
+                                      "Low quality",
+                                      "M1 Macrophage",
+                                      "NK",
+                                      "Mki67+",
+                                      "MoMacDC",
+                                      "Plasma cell IgE",
+                                      "MoMacDC",
+                                      "Neutrophil",
+                                      "MoMacDC",
+                                      "MoMacDC",
+                                      "T-cell",
+                                      "MoMacDC",
+                                      "M2 Macrophage",
+                                      "Plasma cell IgM",
+                                      "NK",
+                                      "T-cell",
+                                      "T-cell",
+                                      "Endothelium",
+                                      "AT2",
+                                      "MoMacDC")
+```
+
+
+```{r}
+mac_markers <- c("Adgre1", "Cd68")
+DotPlot(data_Cd45, features = mac_markers, group.by = "louvain")
+DotPlot(data_Cd45, features = mac_markers)
+data_macrophages <- subset(data_Cd45, louvain %in% c(8, 13, 19, 26))
+DimPlot(data_macrophages, label = TRUE)
+```
+
+```{r}
+ggsave("./data/b1/figures/Cd45_raw_UMAP_for_markers.png", DimPlot(data_Cd45, group.by = "louvain", label = TRUE) + theme(aspect.ratio = 1))
+```
+
+```{r}
+data_Cd45_relabel <- subset(data_Cd45, idents = c("Low quality", "AT2", "Endothelium"), invert = TRUE)
+data_Cd45_relabel$genotype <- as.factor(data_Cd45_relabel$genotype)
+levels(data_Cd45_relabel$genotype) <- c("B1 KO", "WT")
+```
+
+```{r}
+celltypes_plt <- DimPlot(data_Cd45_relabel, group.by = "broad_celltype") +
+        umap_theme() +
+        scale_colour_manual(values = color_scanpy_default) +
+        ggtitle("Cluster")
+
+injury_plt <- DimPlot(data_Cd45_relabel, group.by = "injury") +
+        umap_theme() +
+        scale_colour_manual(values = color_scanpy_default) +
+        ggtitle("Treatment")
+
+genotype_plt <- DimPlot(data_Cd45_relabel, group.by = "genotype") +
+        umap_theme() +
+        scale_colour_manual(values = color_scanpy_default) +
+        ggtitle("Genotype")
+
+celltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/Cd45_UMAP.png", celltypes_plt + injury_plt + genotype_plt)
+```
+
+```{r}
+data_Cd45_relabel$cond_combine <- paste0(data_Cd45_relabel$genotype, "-", data_Cd45_relabel$injury)
+
+
+condition_factor <- ordered(factor(data_Cd45_relabel$cond_combine), c("WT-LPS", "B1 KO-LPS", "B1 KO-NT"))
+
+cell_ident_df <- data.frame(condition = condition_factor,
+                            cluster = as.character(data_Cd45_relabel$broad_celltype))
+
+prop_celltypes <- round(prop.table(table(cell_ident_df$condition, cell_ident_df$cluster), 1) * 100, 1)
+
+
+Cd45_mountain <- ggplot(melt(prop_celltypes), aes(y=value, x=Var1)) +
+        geom_area(aes(color = as.factor(Var2), group=as.factor(Var2), fill = as.factor(Var2))) +
+        xlab("Condition") +
+        ylab("% of cells") +
+        labs(fill = "Cluster", color = "Cluster", group = "Cluster") +
+        scale_colour_manual(aesthetics = c("color", "fill"), values=color_category_20) +
+        theme(legend.key = element_blank(),
+              legend.text = element_markdown(size=14),
+              legend.title = element_text(size=14),
+              axis.text.x  = element_text(size=14),
+              axis.text.y = element_text(size=14),
+              axis.title.x = element_text(size=14),
+              axis.title.y = element_text(size=14),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "white"),
+              aspect.ratio = 1.2
+        ) +
+        scale_x_discrete(expand = c(.01, .01)) +
+        scale_y_continuous(expand = c(.01,.01)) +
+        coord_fixed(0.05)
+
+
+Cd45_mountain
+ggsave("./data/b1/figures/Cd45_mountain.png", Cd45_mountain)
+```
+```{r}
+writeAnnData <- function(seurat_obj, filename){
+  anndata::AnnData(X = t(GetAssayData(seurat_obj, slot = "data", assay = "SCT")),
+                   var = data.frame(gene = rownames(seurat_obj),
+                                    row.names = rownames(seurat_obj)),
+                   obs = data.frame(broad_celltype_guess = as.character(seurat_obj$broad_celltype),
+                                    celltype_guess = as.character(Idents(seurat_obj)),
+                                    louvain = as.character(seurat_obj$louvain),
+                                    injury = as.character(seurat_obj$injury),
+                                    genotype = as.character(seurat_obj$genotype),
+                                    sex = as.character(seurat_obj$sex),
+                                    seq_run = as.character(seurat_obj$orig.ident),
+                                    row.names = colnames(seurat_obj)),
+                   obsm = list(X_umap = matrix(Embeddings(seurat_obj, reduction = "umap"), ncol = 2))
+  )$write_h5ad(filename, compression = "gzip")
+
+  # Need to fix the uns to be a Pandas Series dtype=category for colors
+  # Not necessary? On linux it saves as categorical by default.
+  #  system(paste0("python -c \"from anndata import read_h5ad
+  #import sys
+  #adata = read_h5ad(sys.argv[1])
+  #for i in adata.obs.keys():
+  #    if not i in ['latent_time']:
+  #        adata.obs[i] = adata.obs[i].astype('category')
+  #adata.write_h5ad(sys.argv[1], compression = 'gzip')\" ", filename))
+}
+
+filename <- "./b1_cd45pos_cellxgene_data.h5ad"
+if (!file.exists(filename)) { # Create if doesn't exist
+  writeAnnData(data_Cd45_relabel, filename)
+}
+```
+
+
+```{r}
+plan("sequential")
+data_macrophages <- cluster_pca_umap(data_macrophages, dims_umap = 1:35, dims_neighbors = 1:35, cluster_res = 0.8)
+DimPlot(data_macrophages) + umap_theme() + theme(aspect.ratio = 1)
+
+data_macrophages2 <- cluster_pca_umap(subset(data_macrophages, idents = c(9, 10), invert = TRUE), dims_umap = 1:35, dims_neighbors = 1:35, cluster_res = 0.8)
+DimPlot(data_macrophages2, label = TRUE) + umap_theme() + theme(aspect.ratio = 1)
+```
+
+```{r}
+bulk_seq_data <- read.csv("/Users/negretn/postdoc/code/plosa_bulk_seq/rnaseq_counts.csv")
+bulk_seq_data <- bulk_seq_data[!duplicated(bulk_seq_data[,1]),]
+bulk_seq_data <- bulk_seq_data[!is.na(bulk_seq_data[,1]),]
+rownames(bulk_seq_data) <- bulk_seq_data[, 1]  ## set rownames
+bulk_seq_data <- bulk_seq_data[, -1]           ## remove the first variable
+
+colnames(bulk_seq_data) <- c("iKO LPS Alveolar", "iKO LPS BM", "WT LPS Alveolar", "WT LPS BM", "iKO PBS Alveolar", "iKO PBS BM")
+
+
+
+genes_in_both <- intersect(rownames(bulk_seq_data), rownames(data_macrophages2))
+```
+
+```{r}
+simulated_bulk <- lapply(seq_along(levels(data_macrophages2$seurat_clusters)) - 1, function(x){
+  rowMeans(GetAssayData(subset(data_macrophages2, seurat_clusters == x), assay = "RNA"))[genes_in_both]
+}) %>% do.call(cbind, .)
+colnames(simulated_bulk) <- seq_along(levels(data_macrophages2$seurat_clusters)) - 1
+filtered_bulk <- bulk_seq_data[genes_in_both,]
+```
+
+```{r}
+all_dat <- cbind(simulated_bulk, filtered_bulk)
+gene_variance <- apply(all_dat,1 , var)
+top_2000_var <- names(head(gene_variance[order(gene_variance, decreasing = TRUE)], 2000))
+```
+
+```{r}
+library(PoiClaClu)
+dist <- PoissonDistance(t(all_dat[top_2000_var,]), type = "quantile")
+
+```
+
+```{r}
+dist_mat <- as.matrix(dist$dd)
+colnames(dist_mat) <- colnames(all_dat)
+rownames(dist_mat) <- colnames(all_dat)
+```
+
+
+```{r}
+heatmap_data <- melt(dist_mat)[!(melt(dist_mat)$Var2 %in% c(0:10) | melt(dist_mat)$Var1 %in% colnames(bulk_seq_data)),]
+dist_heatmap <- ggplot(data = heatmap_data, aes(x=Var1, y=Var2, fill=value)) +
+        geom_tile() +
+        scale_fill_viridis(direction = -1, name = "Distance") +
+        ylab("Bulk ID") +
+        xlab("Macrophage cluster") +
+        theme(aspect.ratio = 0.7)
+
+
+dist_heatmap
+
+ggsave("./data/b1/figures/match_bulk_heatmap.pdf", dist_heatmap)
+```
+
+ID,Name,Time,Genotype,Treatment,Source,Rep
+EP-6009-1,iKO LPS alveolar macs,7,iKO,LPS,Alveolar,1
+EP-6009-2,iKO LPS bone marrow macs,7,iKO,LPS,BM,1
+EP-6009-3,C LPS alveolar macs,7,WT,LPS,Alveolar,1
+EP-6009-4,C LPS bone marrow macs,7,WT,LPS,BM,1
+EP-6009-5,iKO PBS alveolar macs,7,iKO,PBS,Alveolar,1
+EP-6009-6,iKO PBS bone macs,7,iKO,PBS,BM,1
+
+```{r}
+data_macrophages2$source <- data_macrophages2$seurat_clusters
+levels(data_macrophages2$source) <- c("Alveolar",
+                                      "BM",
+                                      "Alveolar",
+                                      "BM",
+                                      "Alveolar",
+                                      "Unknown",
+                                      "Alveolar",
+                                      "Alveolar",
+                                      "Unknown"
+)
+```
+
+
+```{r}
+louvain_mac_umap <- DimPlot(data_macrophages2, label = TRUE) + umap_theme() + theme(aspect.ratio = 1)
+genotype_mac_umap <- DimPlot(data_macrophages2, group.by = "genotype") + umap_theme() + theme(aspect.ratio = 1)
+treatment_mac_umap <- DimPlot(data_macrophages2, group.by = "injury") + umap_theme() + theme(aspect.ratio = 1)
+source_mac_umap <- DimPlot(data_macrophages2, group.by = "source") + umap_theme() + theme(aspect.ratio = 1)
+
+louvain_mac_umap + genotype_mac_umap + treatment_mac_umap + source_mac_umap
+ggsave("./data/b1/figures/summary_mac_umap.png", louvain_mac_umap + genotype_mac_umap + treatment_mac_umap + source_mac_umap)
+```
+```{r}
+nfkb_genelist <- unique(c("TNFSF13B","BLIMP1","CCL5","CCL15","CCL17","CCL19","CCL20","CCL22","CCL23","CCL28","CXCL1","CXCL10","CXCL3","CXCL1","CXCL2","IFNG","IL1A","IL1B","IL1RN","IL2","IL6","IL8","IL9","IL10","IL11","IL12B","IL12A","IL13","IL17","IL23A","IL27","EBI3","IFNB1","CXCL5","KC","Iigp1","CXCL5","LTA","LTB","CCL2","CXCL9","CCL3","CCL4","CCL4","CXCL3","CCL20","CXCL5","CCL5","CCL1","TNF","LTA","TNFSF10","TFF3","TNFSF15","CD80","BLR1","CCR5","CCR7","IL8RA","IL8RB","TNFRSF9","CD40LG","CD3G","CR2","CD38","CD40","CD48","CD83","CD86","SLC3A2","TNFRSF4","FCGRT","FCER2","HLA-G","IL2RA","IGHG2","IGHG1","IGHG4","IGHE","IGKC","BDKRB1","HLA-B","B2M","NOD2","pIgR","PGLYRP1","TCRB","CD3G","TLR2","TLR9","TREM1","CFB","C3","CR2","PSMB9","TAP1","TAPBP","CD44","CD209","SELE","ENG","FN1","CD54","MADCAM1","NCAM","SELP","TNC","VCAM1","AGT","DEFB2","C4BPA","CFB","C4A","CRP","HAMP","LBP","PTX3","SAA1","SAA2","SAA3","F3","PLAU","CYP2C11","CYP7B1","PTGS2","FTH1","GCLC","GCLM","HSP90AA1","ALOX12","NOS2A","SENP2","SOD1","SOD1","SOD2","NQO1","PLA2","SELS","ABCA1","ABCC6","ADORA1","ADORA2A","SCNN1A","BDKRB1","C69","OPRD1","EGFR","ERBB2","KISS1","OLR1","KLRA1","ABCB4","OPRM1","GRM2","NPY1R","OXTR","PTAFR","ABCB1","AGER","PYCARD","BAX","BCL2A1","BCL2L1","BCL2","BCL2L11","CD274","BNIP3","CASP4","CFLAR","FAS","CIDEA","FASLG","IER3","TRAF1","TRAF2","XIAP","INHBA","ANGPT1","PI3KAP1","BDNF","TNFSF13B","BLNK","BMP2","BMP4","CALCB","FGF8","FSTL3","CSF3","CSF2","EPO","IGFBP2","CSF1","MDK","NGFB","TACR1","NK4","NRG1","SPP1","PDGFB","PIGF","PENK","PRL","KITLG","VEGFC","IER3","TNFAIP3","TNIP3","AR","BCL3","BMI1","CDX1","MYB","MYC","REL","CEBPD","DMP1","E2F3","ELF3","GATA3","HIF1A","HOXA9","IRF1","IRF2","IRF4","IRF7","NFKBIA","NFKBIE","JUNB","JMJD3","LEF1","CREB3","NFKBIZ","NFKB2","NFKB1","NLRP2","NR4A2","Osterix","TP53","PGR","SPI1","RELB","SNAI1","SOX9","STAT5A","TFEC","TWIST1","WT1","YY1","ADH1A","AICDA","AMACR","ARFRP1","ASS1","CYP19A1","ART1","SERPINA3","BACE1","BTK","CTSB","CDK6","CHI3L1","MMP1","DNASE1L2","LIPG","ST8SIA1","NOX1","MMP9","GSTP1","GCLC","GCLC","G6PC","GNRH2","GZMB","HMOX1","HAS1","HSD11B2","ATP1A2","DIO2","PTGDS","LYZ","MTHFR","MMP3","MMP9","MYLK","NOS2A","NOS1","PIM1","PLK3","PIK3CA","PRKACA","PRKCD","PLCD1","PTPN1","PTHLH","GNB2L1","Slfn2","SERPINA2","ST6GAL1","NUAK2","SAT1","TERT","TGM1","TGM2","PAFAH2","UPP1","ABCG8","ASPH","ORM1","AFP","AMH","APOBEC2","APOC3","APOD","APOE","AQP4","BRCA2","MYOZ1","COL1A2","CCND1","CCND2","IER3","SLC11A2","SKALP, PI3","EDN1","EPHA1","F8","FTH1","GADD45B","GNAI2","LGALS3","GBP1","HBE1","HBZ","KRT5","HMGN1","FABP6","KRT3","KRT6B","KRT15","LAMB2","LCN2","S100A4","SERPINB1","MUC2","MBP","SLC16A1","TNIP1","LCN2","FAM148A","PSME1","PSME2","SERPINE1, PAI-1","PRF1","PPARGC1B","POMC","CGM3","PDYN","KLK3","PTEN","RAG1","RAG2","RBBP4","SERPINE2","S100A6","SH3BGRL","KCNN2","SKP2","OPN1SW","ERVWE1","SDC4","SLC6A6","KCNK5","TICAM1","TRPC1","UPK1B","CYP27B1","VIM","SERPINA1","CXCL1"))
+mouse_nfkb <- homologene::human2mouse(nfkb_genelist)$mouseGene
+```
+
+```{r}
+mouse_nfkb_mod <- c("Tnfsf13b","Ccl5","Ccl17","Gm2564","Ccl22","Cxcl10","Cxcl2","Cxcl1","Ifng","Il1a","Il1b","Il1rn","Il2","Il6","Il10","Il12b","Il12a","Il13","Il23a","Il27","Ebi3","Ifnb1","Lta","Ltb","Ccl12","Ccl4","Ccl1","Tnf","Tnfsf10","Tnfsf15","Cd80","Ccr5","Ccr7","Tnfrsf9","Cd40lg","Cd3g","Cr2","Cd38","Cd40","Cd48","Cd83","Cd86","Slc3a2","Tnfrsf4","Fcgrt","Fcer2a","H2-M3","Il2ra","B2m","Nod2","Pglyrp1","Tlr2","Tlr9","Trem1","Cfb","C3","Psmb9","Tap1","Tapbp","Cd44","Cd209e","Eng","Fn1","Selp","Vcam1","C4b","Lbp","F3","Plau","Cyp7b1","Ptgs2","Fth1","Gclc","Gclm","Hsp90aa1","Senp2","Sod1","Sod2","Nqo1","Abca1","Adora2a","Scnn1a","Oprd1","Egfr","Erbb2","Olr1","Abcb4","Oprm1","Ptafr","Abcb1a","Ager","Pycard","Bax","Bcl2a1a","Bcl2a1b","Bcl2a1d","Bcl2l1","Bcl2","Bcl2l11","Cd274","Bnip3","Casp4","Cflar","Fas","Fasl","Ier3","Traf1","Traf2","Xiap","Inhba","Angpt1","Blnk","Bmp2","Bmp4","Calca","Fstl3","Csf3","Csf2","Csf1","Mdk","Spp1","Pdgfb","Pigf","Penk","Kitl","Vegfc","Tnfaip3","Tnip3","Ar","Bcl3","Myb","Myc","Rel","Cebpd","E2f3","Gata3","Hif1a","Hoxa9","Irf1","Irf2","Irf4","Irf7","Nfkbia","Nfkbie","Junb","Lef1","Creb3","Nfkbiz","Nfkb2","Nfkb1","Nr4a2","Trp53","Spi1","Relb","Snai1","Stat5a","Tfec","Yy1","Aicda","Amacr","Arfrp1","Ass1","Bace1","Btk","Ctsb","Cdk6","Chil1","Dnase1l2","Lipg","St8sia1","Mmp9","Gstp1","Gstp2","Hmox1","Hsd11b2","Lyz2","Lyz1","Mthfr","Mylk","Pim1","Plk3","Pik3ca","Prkaca","Prkcd","Plcd1","Ptpn1","St6gal1","Nuak2","Sat1","Tert","Tgm1","Tgm2","Pafah2","Upp1","Asph","Afp","Amh","Apobec2","Apoe","Brca2","Col1a2","Ccnd1","Ccnd2","Slc11a2","Edn1","Epha1","F8","Gadd45b","Gnai2","Lgals3","Hmgn1","Lamb2","Lcn2","S100a4","Serpinb1a","Mbp","Slc16a1","Tnip1","Psme1","Psme2","Prf1","Ppargc1b","Pomc","Klk1","Klk1b9","Klk1b11","Klk1b27","Pten","Rbbp4","Serpine2","S100a6","Sh3bgrl","Skp2","Sdc4","Slc6a6","Kcnk5","Ticam1","Trpc1","Cyp27b1","Vim")
+```
+
+```{r}
+data_macrophages2 <- AddModuleScore(data_macrophages2, list(mouse_nfkb_mod), name = "nfkb")
+data_macrophages2$source_injury <- paste0(data_macrophages2$source, " - ", data_macrophages2$injury)
+```
+
+
+```{r}
+FeaturePlot(data_macrophages2, "nfkb1")
+```
+
+```{r}
+VlnPlot(data_macrophages2, group.by = "source_injury", split.by = "genotype", features = "nfkb1")
+ggsave("./data/b1/figures/nf_kb_score.png", VlnPlot(data_macrophages2, group.by = "source_injury", split.by = "genotype", features = "nfkb1"))
+
+
+t.test(data_macrophages2$nfkb1[data_macrophages2$source_injury == "Alveolar - LPS" & data_macrophages2$genotype == "B1"],
+            data_macrophages2$nfkb1[data_macrophages2$source_injury == "Alveolar - LPS" & data_macrophages2$genotype == "WT"],
+            alternative = "two.sided")
+
+t.test(data_macrophages2$nfkb1[data_macrophages2$source_injury == "BM - LPS" & data_macrophages2$genotype == "B1"],
+            data_macrophages2$nfkb1[data_macrophages2$source_injury == "BM - LPS" & data_macrophages2$genotype == "WT"],
+            alternative = "two.sided")
+```
+
+```{r}
+# M1 markers
+VlnPlot(data_macrophages2, group.by = "source_injury", split.by = "genotype", features = c("Il6", "Ccl3", "Cxcl10", "Nos2"))
+ggsave("./data/b1/figures/m1_genes.png",
+        VlnPlot(data_macrophages2, group.by = "source_injury", split.by = "genotype", features = c("Il6", "Ccl3", "Cxcl10", "Nos2")),
+        height = 8)
+```
+
+```{r}
+# M2 markers
+VlnPlot(data_macrophages2, group.by = "source_injury", split.by = "genotype", features = c("Arg1"))
+VlnPlot(data_macrophages2, group.by = "source_injury", split.by = "genotype", features = c("Arg1", "Il10", "Chil3", "Ccl17", "Mrc1", "Mertk"))
+ggsave("./data/b1/figures/m2_genes.png",
+        VlnPlot(data_macrophages2, group.by = "source_injury", split.by = "genotype", features = c("Arg1", "Il10", "Chil3", "Ccl17", "Mrc1", "Mertk")),
+        height = 8)
+
+```
+
+```{r}
+
+DotPlot(data_macrophages2, group.by = "source_injury", split.by = "genotype", features = c("Arg1", "Il10", "Chil3", "Ccl17", "Mrc1", "Mertk"))
+```
+
+```{r}
+bm_wt_vs_iko <- FindMarkers(subset(data_macrophages2, source_injury == "BM - LPS"), ident.1 = "B1", ident.2 = "WT", group.by = "genotype")
+bm_wt_vs_iko$gene <- rownames(bm_wt_vs_iko)
+```
+
+```{r}
+bm_wt_vs_iko
+```
+
+```{r}
+writeAnnData <- function(seurat_obj, filename){
+  anndata::AnnData(X = t(GetAssayData(seurat_obj, slot = "data", assay = "SCT")),
+                   var = data.frame(gene = rownames(seurat_obj),
+                                    row.names = rownames(seurat_obj)),
+                   obs = data.frame(louvain = as.character(seurat_obj$louvain),
+                                    injury = as.character(seurat_obj$injury),
+                                    genotype = as.character(seurat_obj$genotype),
+                                    sex = as.character(seurat_obj$sex),
+                                    source = as.character(seurat_obj$source),
+                                    nf_kb_score = as.numeric(seurat_obj$nfkb1),
+                                    seq_run = as.character(seurat_obj$orig.ident),
+                                    row.names = colnames(seurat_obj)),
+                   obsm = list(X_umap = matrix(Embeddings(seurat_obj, reduction = "umap"), ncol = 2))
+  )$write_h5ad(filename, compression = "gzip")
+
+  # Need to fix the uns to be a Pandas Series dtype=category for colors
+  # Not necessary? On linux it saves as categorical by default.
+  #  system(paste0("python -c \"from anndata import read_h5ad
+  #import sys
+  #adata = read_h5ad(sys.argv[1])
+  #for i in adata.obs.keys():
+  #    if not i in ['latent_time']:
+  #        adata.obs[i] = adata.obs[i].astype('category')
+  #adata.write_h5ad(sys.argv[1], compression = 'gzip')\" ", filename))
+}
+
+filename <- "./b1_macrophages_cellxgene_data.h5ad"
+if (!file.exists(filename)) { # Create if doesn't exist
+  writeAnnData(data_macrophages2, filename)
+}
+```
+```

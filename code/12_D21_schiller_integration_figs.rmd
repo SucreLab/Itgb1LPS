@@ -1,0 +1,584 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+#opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 14
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data_combined_all <- readRDS("./data/b1/20211216_schiller_plosa_integrated_D21.rds")
+plosa_epi_w_transfer_D21 <- readRDS("./data/b1/D21_b1_labeled_epithelium_lab_transfer.rds")
+```
+
+```{r}
+plosa_epi_w_transfer_D21$injury_genotype <- paste0(plosa_epi_w_transfer_D21$injury, " ", plosa_epi_w_transfer_D21$genotype)
+epi_data_combined_all$injury_genotype <- paste0(epi_data_combined_all$injury, " ", epi_data_combined_all$genotype)
+```
+
+```{r}
+DimPlot(subset(epi_data_combined_all, lab == "schiller"), group.by = "cell_type")
+DimPlot(subset(epi_data_combined_all, lab == "plosa"), group.by = "injury_genotype")
+
+```
+
+
+
+```{r}
+plosa_epi_w_transfer_D21
+
+
+epi_data_D21 <- cluster_pca_umap(epi_data_D21, dims_umap = 1:15, dims_neighbors = 1:15, k_param = 8, cluster_res = 1.2)
+
+```
+
+```{r}
+
+plosa_epi_w_transfer_D21 <- cluster_pca_umap(plosa_epi_w_transfer_D21, dims_umap = 1:15, dims_neighbors = 1:15, k_param = 8, cluster_res = 1.2)
+
+```
+
+```{r}
+subcelltypes_plt <- DimPlot(plosa_epi_w_transfer_D21, group.by = "predicted.id") +
+  umap_theme() +
+  scale_colour_manual(values = color_category_20) +
+  ggtitle("Cluster")
+
+injury_plt <- DimPlot(plosa_epi_w_transfer_D21, group.by = "injury") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Treatment")
+
+genotype_plt <- DimPlot(plosa_epi_w_transfer_D21, group.by = "genotype") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/prelim_schiller/D21_transferred_UMAP.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+plosa_epi_w_transfer_ko <- subset(plosa_epi_w_transfer_D21, genotype == "iKO")
+plosa_epi_w_transfer_wt <- subset(plosa_epi_w_transfer_D21, genotype == "WT" & predicted.id != "basal cells")
+
+```
+
+```{r}
+subcelltypes_plt <- DimPlot(plosa_epi_w_transfer_ko, group.by = "predicted.id") +
+  umap_theme() +
+  scale_colour_manual(values = color_category_20) +
+  ggtitle("Cluster")
+
+injury_plt <- DimPlot(plosa_epi_w_transfer_ko, group.by = "injury") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Treatment")
+
+genotype_plt <- DimPlot(plosa_epi_w_transfer_ko, group.by = "genotype") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/prelim_schiller/D21_transferred_UMAP_ko.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+subcelltypes_plt <- DimPlot(plosa_epi_w_transfer_wt, group.by = "predicted.id") +
+  umap_theme() +
+  scale_colour_manual(values = color_category_20) +
+  ggtitle("Cluster")
+
+injury_plt <- DimPlot(plosa_epi_w_transfer_wt, group.by = "injury") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Treatment")
+
+genotype_plt <- DimPlot(plosa_epi_w_transfer_wt, group.by = "genotype") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/prelim_schiller/D21_transferred_UMAP_wt.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+filter <- plosa_epi_w_transfer_D21$predicted.id %in% c("activated AT2",
+                                               "AT1 cells",
+                                               "AT2 cells",
+                                               "Krt8 ADI")
+freq_table_schiller <- prop.table(table(plosa_epi_w_transfer_D21$predicted.id[filter], plosa_epi_w_transfer_D21$genotype[filter]), margin = 2) * 100
+freq_table_schiller
+
+
+freq_df_schiller <- as.data.frame(freq_table_schiller)
+group_order <- c("WT", "iKO")
+freq_df_schiller$Var2 <- ordered(as.factor(freq_df_schiller$Var2), group_order)
+
+schiller_plosa_proportions <- ggplot(freq_df_schiller,aes(x=ordered(Var2, group_order),y=Freq,fill=Var1)) +
+        geom_col() +
+        scale_fill_manual(values = color_category_20[c(1, 4, 5, 10)], name = "Cell type") +
+        xlab("Condition") +
+        ylab("Cell Proportion") +
+        theme(legend.text = element_markdown(size=12),
+              legend.title = element_text(size=12),
+              axis.text.x  = element_text(size=12, color = "black", angle = 45, hjust=1),
+              axis.text.y = element_text(size=12, color = "black"),
+              axis.title.x = element_text(size=12),
+              axis.title.y = element_text(size=12),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent"),
+              aspect.ratio = 1.2) +
+        scale_x_discrete(expand = c(.05, .05)) +
+        scale_y_continuous(expand = c(.01,.01)) +
+        coord_fixed(0.05)
+schiller_plosa_proportions
+
+ggsave("./data/b1/figures/D21_schiller_epi_proportions.pdf",
+       schiller_plosa_proportions,
+       dpi = 300, bg = "transparent",
+       width=unit(6, "cm"), height=unit(5, "cm"))
+
+```
+
+
+```{r}
+plosa_epi_w_transfer_reorg <- plosa_epi_w_transfer_D21
+```
+
+Heatmap for showing differentiation state - big buckets
+```{r}
+
+
+groups <- c("B1 f/f LPS", "B1 KO LPS")
+groups_in_data <- rev(c("LPS WT", "LPS iKO"))  # injury_genotype
+genes <- c("Sftpc", "Sftpa1", "Abca3", "Aqp5", "Ager", "Pdpn", "Rtkn2", "Hopx", "Col4a3", "Fbln5", "Krt8", "Hbegf", "Areg")
+
+gene_categories <- c("AT2", "AT1")
+
+plosa_epi_w_transfer_reorg@meta.data$injury_genotype <- ordered(as.factor(plosa_epi_w_transfer_reorg$injury_genotype), groups_in_data)
+```
+
+```{r}
+
+plosa_epi_subset_schillerAT2 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "AT2 cells")
+plosa_epi_subset_schillerActAT2 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "activated AT2")
+plosa_epi_subset_schillerAT1 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "AT1 cells")
+plosa_epi_subset_schillerKrt8<- subset(plosa_epi_w_transfer_reorg, predicted.id == "Krt8 ADI")
+plosa_epi_subset_schillerAT2_w_activated<- subset(plosa_epi_w_transfer_reorg, predicted.id %in% c("AT2 cells", "activated AT2"))
+```
+
+```{r}
+table(plosa_epi_w_transfer_reorg$injury, plosa_epi_w_transfer_reorg$predicted.id, plosa_epi_w_transfer_reorg$genotype)
+```
+
+```{r}
+
+
+markers_shiller_at2 <- DotPlot(plosa_epi_subset_schillerAT2, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1) +
+        ggtitle("AT2 cells - D21")
+markers_shiller_at2
+
+
+markers_shiller_ActAt2 <- DotPlot(plosa_epi_subset_schillerActAT2, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1) +
+        ggtitle("Activated AT2 cells - D21")
+markers_shiller_ActAt2
+
+markers_shiller_at1 <- DotPlot(plosa_epi_subset_schillerAT1, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("AT1 cells - D21")
+markers_shiller_at1
+
+markers_shiller_at1 <- DotPlot(plosa_epi_subset_schillerAT1, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("AT1 cells - D21")
+markers_shiller_at1
+
+markers_shiller_krt8 <- DotPlot(plosa_epi_subset_schillerKrt8, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("Krt8-hi cells - D21")
+markers_shiller_krt8
+
+markers_shiller_at2_w_activated<- DotPlot(plosa_epi_subset_schillerAT2_w_activated, group.by = "injury_genotype", features = genes, dot.scale = 10,
+                                          scale = FALSE) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("AT2 with activated cells - D21")
+markers_shiller_at2_w_activated
+
+ggsave("./data/b1/figures/D21_dotplot_at1_2_markers_schiller_AT2_with_activated_at2_v2.pdf", markers_shiller_at2_w_activated, width = 7.5, height = 2.5)
+ggsave("./data/b1/figures/D21_dotplot_at1_2_markers_schiller_AT2_v2.pdf", markers_shiller_at2, width = 7.5, height = 2.5)
+ggsave("./data/b1/figures/D21_dotplot_at1_2_markers_schiller_ActAT2_v2.pdf", markers_shiller_ActAt2, width = 7.5, height = 2.5)
+ggsave("./data/b1/figures/D21_dotplot_at1_2_markers_schiller_ActAT1_v2.pdf", markers_shiller_at1, width = 7.5, height = 2.5)
+ggsave("./data/b1/figures/D21_dotplot_at1_2_markers_schiller_krt8_v2.pdf", markers_shiller_krt8, width = 7.5, height = 2.5)
+
+```
+
+
+
+```{r}
+GeomSplitViolin <- ggproto("GeomSplitViolin", GeomViolin,
+                           draw_group = function(self, data, ..., draw_quantiles = NULL) {
+                             data <- transform(data, xminv = x - violinwidth * (x - xmin), xmaxv = x + violinwidth * (xmax - x))
+
+                             fill <- data[1, "fill"]
+                             left_col <- "#1f77b4"
+                             #newdata <- plyr::arrange(transform(data, x = if (grp %% 2 == 1) xminv else xmaxv), if (grp %% 2 == 1) y else -y)
+                             newdata <- suppressWarnings(
+                               plyr::arrange(transform(data, x = if (fill == left_col) xminv else xmaxv), if (fill == left_col) y else -y)
+                             )
+                             #unique(data$fill)
+                             newdata <- rbind(newdata[1, ], newdata, newdata[nrow(newdata), ], newdata[1, ])
+                             newdata[c(1, nrow(newdata) - 1, nrow(newdata)), "x"] <- round(newdata[1, "x"])
+
+                             if (length(draw_quantiles) > 0 & !scales::zero_range(range(data$y))) {
+                               stopifnot(all(draw_quantiles >= 0), all(draw_quantiles <=
+                                                                         1))
+                               quantiles <- ggplot2:::create_quantile_segment_frame(data, draw_quantiles)
+                               aesthetics <- data[rep(1, nrow(quantiles)), setdiff(names(data), c("x", "y")), drop = FALSE]
+                               aesthetics$alpha <- rep(1, nrow(quantiles))
+                               both <- cbind(quantiles, aesthetics)
+                               quantile_grob <- GeomPath$draw_panel(both, ...)
+                               ggplot2:::ggname("geom_split_violin", grid::grobTree(GeomPolygon$draw_panel(newdata, ...), quantile_grob))
+                             }
+                             else {
+                               ggplot2:::ggname("geom_split_violin", GeomPolygon$draw_panel(newdata, ...))
+                             }
+                           })
+
+geom_split_violin <- function(mapping = NULL, data = NULL, stat = "ydensity", position = "identity", ...,
+                              draw_quantiles = NULL, trim = TRUE, scale = "area", na.rm = FALSE,
+                              show.legend = NA, inherit.aes = TRUE) {
+  layer(data = data, mapping = mapping, stat = stat, geom = GeomSplitViolin,
+        position = position, show.legend = show.legend, inherit.aes = inherit.aes,
+        params = list(trim = trim, scale = scale, draw_quantiles = draw_quantiles, na.rm = na.rm, ...))
+}
+
+```
+
+```{r}
+gene_of_interest <- genes
+celltype_of_interest <- "AT2 cells with activated"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_reorg)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_reorg, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               condition = plosa_epi_w_transfer_reorg$genotype,
+               celltype = plosa_epi_w_transfer_reorg$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype %in% c("AT2 cells", "activated AT2")),
+                    aes(x = ordered(gene, gene_of_interest),
+                        fill = ordered(condition, c("WT", "iKO")),
+                        y = expression)) +
+        geom_split_violin(scale = "width") +
+        #geom_quasirandom(dodge.width = 0.5) +
+        geom_point(aes(group = ordered(condition, c("WT", "iKO"))), position=position_jitterdodge(dodge.width = 0.55), size = 0.5) +
+        #xlab("Time") +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default, name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()) +
+        ggtitle(paste0("Expression in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/figures/grant/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/Markers_D21_SPLIT_",celltype_of_interest,".png"), all_vln_p, width = 10, scale = 1)
+```
+
+```{r}
+gene_of_interest <- genes
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_reorg)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_reorg, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               condition = plosa_epi_w_transfer_reorg$genotype,
+               celltype = plosa_epi_w_transfer_reorg$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(gene, gene_of_interest),
+                        fill = ordered(condition, c("WT", "iKO")),
+                        y = expression)) +
+  geom_split_violin(scale = "width") +
+  #geom_quasirandom(dodge.width = 0.5) +
+  geom_point(aes(group = ordered(condition, c("WT", "iKO"))), position=position_jitterdodge(dodge.width = 0.55), size = 0.5) +
+  #xlab("Time") +
+  ylab("Expression") +
+  scale_fill_manual(values = color_scanpy_default, name = "Condition") +
+  theme(axis.text = element_text(color = "black"),
+        panel.background = element_rect(fill = "transparent", colour = "black"),
+        plot.background = element_rect(color = "transparent", fill = "transparent"),
+        legend.background = element_rect(color = "transparent", fill = "transparent"),
+        axis.title.x = element_blank()) +
+  ggtitle(paste0("Expression in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/figures/grant/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/Markers_D21_SPLIT_",celltype_of_interest,".png"), all_vln_p, width = 10, scale = 1)
+```
+
+```{r}
+gene_of_interest <- genes
+celltype_of_interest <- "Krt8 ADI"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_reorg)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_reorg, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               condition = plosa_epi_w_transfer_reorg$genotype,
+               celltype = plosa_epi_w_transfer_reorg$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(gene, gene_of_interest),
+                        fill = ordered(condition, c("WT", "iKO")),
+                        y = expression)) +
+        geom_split_violin(scale = "width") +
+        #geom_quasirandom(dodge.width = 0.5) +
+        geom_point(aes(group = ordered(condition, c("WT", "iKO"))), position=position_jitterdodge(dodge.width = 0.55), size = 0.5) +
+        #xlab("Time") +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default, name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()) +
+        ggtitle(paste0("Expression in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/figures/grant/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/Markers_D21_SPLIT_",celltype_of_interest,".png"), all_vln_p, width = 10, scale = 1)
+```
+
+
+
+```{r}
+
+test_celltypes <- c("AT2 cells", "activated AT2", "Krt8 ADI")
+celltype_markers <- lapply(test_celltypes, function(x){
+  # LPS only - WT vs B1
+  # NT only - WT vs B1
+  # B1 only - NT vs LPS
+  # WT only - NT vs LPS
+  print(x)
+  celltype_only <- subset(plosa_epi_w_transfer_D21, predicted.id == x)
+  cell_numbers <- table(celltype_only$injury, celltype_only$genotype)
+
+  print(cell_numbers)
+  if (min(cell_numbers["LPS",]) > 5 ) {
+    lps_WT_vs_B1 <- FindMarkers(subset(celltype_only, injury == "LPS"), group.by = "genotype", "iKO", "WT", test.use = "MAST")
+  } else {
+    lps_WT_vs_B1 <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+
+  out <- list(lps_WT_vs_B1)
+
+  return(out)
+
+})
+names(celltype_markers) <- test_celltypes
+
+
+df_markers_ipa <- lapply(test_celltypes, function(x){
+  print(x)
+  in_single <- celltype_markers[[x]]
+  names(in_single) <- c("LPS B1 vs WT")
+  out <- lapply(c("LPS B1 vs WT"), function(z){
+    out <- in_single[[z]][rownames(plosa_epi_w_transfer_D21), c("avg_log2FC", "p_val_adj")]
+    new_colnames <- as.vector(sapply(c("avg_log2FC", "p_val_adj"), function(y) { paste0(z, " - ", y) }))
+    colnames(out) <- new_colnames
+    rownames(out) <- rownames(plosa_epi_w_transfer_D21)
+    return(out)
+  })  %>% do.call(cbind, .)
+
+  new_colnames <- paste0(x, "; ", colnames(out))
+  colnames(out) <- new_colnames
+  return(out)
+
+
+}) %>% do.call(cbind, .)
+
+# Keep only rows that are not ALL NA
+#df_markers_ipa <- df_markers_ipa[apply(df_markers_ipa, 1, function(x){ all(!is.na(x))}),]
+write.xlsx(df_markers_ipa, file = "./data/b1/markers_xfer_celltype_plosa_b1_IPA_correct_direction_D21.xlsx",
+           overwrite = TRUE, rowNames = TRUE)
+
+
+
+```
+
+```{r}
+
+test_celltypes <- c("AT2 merge")
+celltype_markers <- lapply(test_celltypes, function(x){
+  # LPS only - WT vs B1
+  # NT only - WT vs B1
+  # B1 only - NT vs LPS
+  # WT only - NT vs LPS
+  print(x)
+  celltype_only <- subset(plosa_epi_w_transfer_D21, predicted.id %in% c("AT2 cells", "activated AT2"))
+  cell_numbers <- table(celltype_only$injury, celltype_only$genotype)
+
+  print(cell_numbers)
+  if (min(cell_numbers["LPS",]) > 5) {
+    lps_WT_vs_B1 <- FindMarkers(subset(celltype_only, injury == "LPS"), group.by = "genotype", "iKO", "WT", test.use = "MAST")
+  } else {
+    lps_WT_vs_B1 <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+
+  out <- list(lps_WT_vs_B1)
+
+  return(out)
+
+})
+names(celltype_markers) <- test_celltypes
+
+
+df_markers_ipa <- lapply(test_celltypes, function(x){
+  print(x)
+  in_single <- celltype_markers[[x]]
+  names(in_single) <- c("LPS B1 vs WT")
+  out <- lapply(c("LPS B1 vs WT"), function(z){
+    out <- in_single[[z]][rownames(plosa_epi_w_transfer_D21), c("avg_log2FC", "p_val_adj")]
+    new_colnames <- as.vector(sapply(c("avg_log2FC", "p_val_adj"), function(y) { paste0(z, " - ", y) }))
+    colnames(out) <- new_colnames
+    rownames(out) <- rownames(plosa_epi_w_transfer_D21)
+    return(out)
+  })  %>% do.call(cbind, .)
+
+  new_colnames <- paste0(x, "; ", colnames(out))
+  colnames(out) <- new_colnames
+  return(out)
+
+
+}) %>% do.call(cbind, .)
+
+
+# Keep only rows that are not ALL NA
+#df_markers_ipa <- df_markers_ipa[apply(df_markers_ipa, 1, function(x){ all(!is.na(x))}),]
+write.xlsx(df_markers_ipa, file = "./data/b1/markers_xfer_celltype_plosa_b1_IPA_correct_direction_AT2_merge_D21.xlsx",
+           overwrite = TRUE, rowNames = TRUE)
+
+
+
+```
+```{r}
+library("RColorBrewer")
+
+
+condition_list <- rev(unique(plosa_epi_w_transfer_D21$injury_genotype))
+
+for (condition_idx in seq_along(unique(plosa_epi_w_transfer_D21$injury_genotype))){
+  gplot_out <- ggplot() + umap_theme() +
+          ggrastr::rasterise(geom_point(data = plosa_epi_w_transfer_D21, aes(x = x, y = y), color = "lightgrey", size = .1), dpi = 600) +
+          theme(aspect.ratio=1,
+                legend.text=element_text(size=12),
+                legend.title=element_text(size=12),
+                panel.background = element_rect(fill = "transparent", colour = "black"),
+                plot.background = element_rect(color = "transparent", fill = "transparent"),
+                legend.background = element_rect(color = "transparent", fill = "transparent")) +
+          ggrastr::rasterise(geom_point(data = subset(plosa_epi_w_transfer_D21, injury_genotype == condition_list[condition_idx]),
+                                        aes(x = x, y = y), color = color_scanpy_default[c(1, 3)][condition_idx], size = .1), dpi = 600) +
+          ggtitle(condition_list[condition_idx]) +
+          xlab("UMAP1") + ylab("UMAP2")
+
+
+  ggsave(paste0("./data/b1/figures/D21_schiller_merge_epi_UMAP_", condition_list[condition_idx], "w_grey.pdf"),
+         gridExtra::grid.arrange(egg::set_panel_size(p=gplot_out, width=unit(7, "cm"), height=unit(7, "cm"))),
+         dpi = 300, bg = "transparent",
+         width=unit(6, "cm"), height=unit(5, "cm"))
+
+}
+
+```
+
+```{r}
+schiller_subcelltypes_plt <- ggplot() + umap_theme() +
+        ggrastr::rasterise(geom_point(data = plosa_epi_w_transfer_D21, aes(x = x, y = y, color = predicted.id), size = .1), dpi = 600) +
+        scale_colour_manual(name = "", values = color_category_20[c(1, 6, 4, 2, 8, 3)], guide = guide_legend(override.aes = list(size=3), order = 1)) +
+        theme(aspect.ratio=1,
+              legend.text=element_text(size=12),
+              legend.title=element_text(size=12),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent")) +
+        new_scale_color() +
+        ggtitle("Cell type") +
+        xlab("UMAP1") + ylab("UMAP2")
+schiller_subcelltypes_plt
+
+ggsave(paste0("./data/b1/figures/D21_schiller_merge_epi_UMAP_.pdf"),
+       gridExtra::grid.arrange(egg::set_panel_size(p=schiller_subcelltypes_plt, width=unit(7, "cm"), height=unit(7, "cm"))),
+       dpi = 300, bg = "transparent",
+       width=unit(6, "cm"), height=unit(5, "cm"))
+
+```

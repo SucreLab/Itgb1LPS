@@ -1,0 +1,269 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 9/2/2022
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+#renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 4
+plan("multiprocess", workers = N_WORKERS)
+plan("sequential")
+```
+
+```{r}
+runSoupX <- function(raw_counts, filtered_counts, mat_out_path, project_name){
+  in_soup <- SoupChannel(tod = raw_counts[rownames(raw_counts) != "Gm42418",],
+                         toc = filtered_counts[rownames(filtered_counts) != "Gm42418",],
+                         metaData = NULL, soupRange = c(0, 10), keepDroplets = FALSE) # Gm42418 is a rRNA contaminant - remove it now
+  sr_obj <- CreateSeuratObject(in_soup$toc)
+  # Fast preliminary clustering and normalization for soupx run
+  sr_obj <- NormalizeData(sr_obj)
+  sr_obj <- FindVariableFeatures(sr_obj)
+  sr_obj <- ScaleData(sr_obj)
+  sr_obj <- RunPCA(sr_obj,pcs.compute=30)
+  sr_obj <- RunUMAP(sr_obj,dims=1:15)
+  sr_obj <- FindNeighbors(sr_obj,dims=1:15)
+  sr_obj <- FindClusters(sr_obj,resolution=1.2)
+  sr_DF <-  as.data.frame(sr_obj@reductions$umap@cell.embeddings)
+  colnames(sr_DF) <- c('RD1','RD2')
+  sr_DF$Cluster <- factor(sr_obj@meta.data[rownames(sr_DF),'RNA_snn_res.1.2'])
+
+  #Specify background RNA genes
+  background_RNA_genes <- c("Dcn", "Bgn", "Aspn", "Ecm2", "Fos", "Hbb-bs", "Hbb-bt", "Hba-a1", "Hba-a2", "Lyz1", "Lyz2", "Mgp", "Postn", "Scgb1a1")
+
+  #Specify background RNA genes for epithelial specific cell sort
+  est_expression <- estimateNonExpressingCells(in_soup,
+                                               list(SLRP = background_RNA_genes),
+                                               clusters = setNames(sr_DF$Cluster, rownames(sr_DF)),
+                                               FDR = 0.05,
+                                               maximumContamination = 1.5)
+
+  ## calculate contamination and adjust the counts.
+  in_soup <- setClusters(in_soup, sr_DF$Cluster)
+  in_soup <- calculateContaminationFraction(in_soup, list(SLRP = background_RNA_genes), useToEst = est_expression, forceAccept = TRUE)
+  head(in_soup$metaData)
+
+  ## adjust the counts based on contamination fraction
+  ## Return dgCMatrix
+  #return(adjustCounts(in_soup, roundToInt = TRUE))
+  adj_counts <- adjustCounts(in_soup)
+  dir.create(mat_out_path, recursive=TRUE, showWarnings = FALSE)
+  writeMMgz(adj_counts, file = paste0(mat_out_path, "counts.mtx.gz"))
+  #writeMMgz(adj_counts, file = paste0(mat_out_path, "counts.mtx"))
+  #DropletUtils::write10xCounts(mat_out_path, adj_counts)
+  out_object <- CreateSeuratObject(counts = adj_counts, project = project_name, overwrite = TRUE)
+  out_object[["RAW_COUNTS"]] <- CreateAssayObject(counts = filtered_counts[rownames(out_object),])
+  DefaultAssay(out_object) <- "RNA"
+  return(out_object)
+}
+```
+
+
+```{r}
+
+pct_mt_high <- 15
+pct_mt_low <- 0.1
+min_nfeature <- 700
+# Construct futures, start calculation
+
+WT_NT_Adult_1 %<-% {runSoupX(Read10X("./data/WT_adult/raw_feature_bc_matrix JS5")$`Gene Expression`,
+                             Read10X("./data/WT_adult/filtered_feature_bc_matrix JS5")$`Gene Expression`,
+                                 "./data/seq/WT_NT_Adult_1/soupx_counts/",
+                                 "WT_NT_Adult_1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+WT_NT_Adult_2 %<-% {runSoupX(Read10X("./data/WT_adult/raw_feature_bc_matrix JS-11 P64")$`Gene Expression`,
+                             Read10X("./data/WT_adult/filtered_feature_bc_matrix JS11 P64-2")$`Gene Expression`,
+                                 "./data/seq/WT_NT_Adult_2/soupx_counts/",
+                                 "WT_NT_Adult_2") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+WT_LPS_Adult_1 %<-% {runSoupX(Read10X("./data/b1/EP2_WT_Cd45neg_LPS/raw_feature_bc_matrix")$`Gene Expression`,
+                              Read10X("./data/b1/EP2_WT_Cd45neg_LPS/filtered_feature_bc_matrix")$`Gene Expression`,
+                                  "./data/seq/WT_LPS_Adult_1/soupx_counts/",
+                                  "WT_LPS_Adult_1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+
+B1_NT_Adult_1 %<-% {runSoupX(Read10X("./data/b1/EP4_B1_P7_CD45neg/raw_feature_bc_matrix")$`Gene Expression`,
+                             Read10X("./data/b1/EP4_B1_P7_CD45neg/filtered_feature_bc_matrix")$`Gene Expression`,
+                                 "./data/seq/B1_NT_Adult_1/soupx_counts/",
+                                 "B1_NT_Adult_1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+
+B1_LPS_Adult_1 %<-% {runSoupX(Read10X("./data/b1/EP6_B1_P7_CD45neg_LPS/raw_feature_bc_matrix")$`Gene Expression`,
+                             Read10X("./data/b1/EP6_B1_P7_CD45neg_LPS/filtered_feature_bc_matrix")$`Gene Expression`,
+                             "./data/seq/B1_LPS_Adult_1/soupx_counts/",
+                             "B1_LPS_Adult_1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+
+
+
+```
+
+```{r}
+# Limit memory usage by running SoupX on load, reduces number of matricies in RAM
+# The SoupX function also drops Gm42418
+
+# Construct list from futures, block until resolved
+expression_objs_no_Cd45 <- list(
+  WT_NT_Adult_1 = WT_NT_Adult_1,
+  WT_NT_Adult_2 = WT_NT_Adult_2,
+  WT_LPS_Adult_1 = WT_LPS_Adult_1,
+  B1_NT_Adult_1 = B1_NT_Adult_1,
+  B1_LPS_Adult_1 = B1_LPS_Adult_1
+)
+```
+
+
+# Assign sex based on hashing antibodies
+## Read in HTO information
+```{r}
+# Only load in AB capture data to conseve memory
+# Using lists for easier looping
+antibody_dat <- list(
+  WT_NT_Adult_1 = Read10X("./data/WT_adult/filtered_feature_bc_matrix JS5")$`Antibody Capture`,
+  WT_NT_Adult_2 = Read10X("./data/WT_adult/filtered_feature_bc_matrix JS11 P64-2")$`Antibody Capture`,
+  WT_LPS_Adult_1 = Read10X("./data/b1/EP2_WT_Cd45neg_LPS/filtered_feature_bc_matrix")$`Antibody Capture`,
+  B1_NT_Adult_1 = Read10X("./data/b1/EP4_B1_P7_CD45neg/filtered_feature_bc_matrix")$`Antibody Capture`,
+  B1_LPS_Adult_1 = Read10X("./data/b1/EP6_B1_P7_CD45neg_LPS/filtered_feature_bc_matrix")$`Antibody Capture`
+)
+
+```
+
+## Set information abuot sex vs antibody
+```{r}
+mouse_ab_names <- c("anti-mouse-1", "anti-mouse-2", "anti-mouse-3", "anti-mouse-4", "anti-mouse-5")
+ab_list <- list(
+  WT_NT_Adult_1 = mouse_ab_names[1:4],
+  WT_NT_Adult_2 = mouse_ab_names[1:4],
+  WT_LPS_Adult_1 = mouse_ab_names[3:5],
+  B1_NT_Adult_1 = mouse_ab_names[1:3],
+  B1_LPS_Adult_1 = mouse_ab_names[3:5]
+)
+
+sex_mapping <- list(
+  WT_NT_Adult_1 = c("F", "F", "M", "M"),
+  WT_NT_Adult_2 = c("F", "F", "M", "M"),
+  WT_LPS_Adult_1 = c("F", "F", "F"),
+  B1_NT_Adult_1 = c("F", "M", "M"),
+  B1_LPS_Adult_1 = c("M", "M", "M")
+)
+
+```
+
+
+## Determine hashing antibodies by cell
+```{r}
+hashtag_objects <- lapply(names(antibody_dat), function(name){
+  print(name)
+  # Grab data from only the antibodies used
+  # Subset the count object by 1: The antibodies added to the rxn, and 2: Cells that passed basic QC
+  obj_hashtag <- CreateSeuratObject(counts = antibody_dat[[name]][ab_list[[name]],
+                                                                  colnames(expression_objs_no_Cd45[[name]])],
+                                    assay = "HTO")
+  # Normalize HTO data, here we use centered log-ratio (CLR) transformation
+  obj_hashtag <- NormalizeData(obj_hashtag, assay = "HTO", normalization.method = "CLR")
+  obj_hashtag <- HTODemux(obj_hashtag, assay = "HTO", positive.quantile = 0.99)
+  print(HTOHeatmap(obj_hashtag, assay = "HTO", ncells = 5000) + ggtitle(name))
+
+  # Next, assign the sex based on what antibody was assigned
+  obj_hashtag$antibody <- "Unknown"
+  obj_hashtag$sex <- "Unknown"
+  # This block translates the antibody to sex
+  for (called_ab_name in unique(ab_list[[name]])){
+    obj_hashtag$sex[obj_hashtag$HTO_classification == called_ab_name] <- sex_mapping[[name]][which(ab_list[[name]] == called_ab_name)]
+    obj_hashtag$antibody[obj_hashtag$HTO_classification == called_ab_name] <- called_ab_name
+  }
+  obj_hashtag$top_two_ab_correlation <- 1 - ((obj_hashtag$HTO_margin - min(obj_hashtag$HTO_margin))/
+          (max(obj_hashtag$HTO_margin) - min(obj_hashtag$HTO_margin)))
+  # Make these a factor
+  obj_hashtag$antibody <- as.factor(obj_hashtag$antibody)
+  obj_hashtag$sex <- as.factor(obj_hashtag$sex)
+
+
+  return(obj_hashtag)
+})
+
+names(hashtag_objects) <- names(antibody_dat)
+```
+
+## Transfer hashing antibody info to counts seurat objects
+```{r}
+for (obj_name in names(ab_list)){
+
+  for (meta_col in colnames(hashtag_objects[[obj_name]]@meta.data)){
+    dat <- hashtag_objects[[obj_name]]@meta.data[[meta_col]]
+    names(dat) <- colnames(hashtag_objects[[obj_name]])
+    expression_objs_no_Cd45[[obj_name]]@meta.data[[paste0("HTO_", meta_col)]] <- dat[colnames(hashtag_objects[[obj_name]])]
+  }
+}
+```
+
+# Merge object and save
+```{r}
+EP_LPS_data <- Reduce(function(x,y){merge(x,y)}, expression_objs_no_Cd45)
+EP_LPS_data <- PercentageFeatureSet(EP_LPS_data, pattern = "^mt-", col.name = "percent.mt")
+
+EP_LPS_data$genotype <- "Unassigned"
+EP_LPS_data$injury <- "Unassigned"
+EP_LPS_data$timepoint <- "Unassigned"
+EP_LPS_data$genotype <- sapply(str_split(EP_LPS_data$orig.ident, "_"), function(x){x[1]})
+EP_LPS_data$injury <- sapply(str_split(EP_LPS_data$orig.ident, "_"), function(x){x[2]})
+EP_LPS_data$timepoint <- sapply(str_split(EP_LPS_data$orig.ident, "_"), function(x){x[3]})
+
+saveRDS(EP_LPS_data, "./data/b1/b1_noCd45_merged.rds", compress = "bzip2")
+```
+
+# SCTranform and save
+```{r}
+plan("multiprocess", workers = N_WORKERS)
+EP_LPS_data <- SCTransform(EP_LPS_data, variable.features.n = 2000,
+                           conserve.memory = TRUE, batch_var = "orig.ident",
+                           vars.to.regress = c("percent.mt"),
+                           method = 'glmGamPoi')
+```
+
+```{r}
+plan("sequential")
+EP_LPS_data <- cluster_pca_umap(EP_LPS_data, dims_umap = 1:35, dims_neighbors = 1:35, cluster_res = 0.6)
+```
+
+```{r}
+saveRDS(EP_LPS_data, "./data/b1/b1_noCd45_sct.rds", compress = "bzip2")
+```
+
+
+```{r}
+DimPlot(EP_LPS_data, label = TRUE)
+DimPlot(EP_LPS_data, group.by = "injury")
+DimPlot(EP_LPS_data, group.by = "genotype")
+```
+
+
+```{r}
+FeaturePlot(EP_LPS_data, c("Pdpn", "Ager", "Epcam", "Col4a3"))
+```

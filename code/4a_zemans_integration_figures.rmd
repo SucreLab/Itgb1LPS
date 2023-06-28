@@ -1,0 +1,233 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 14
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data_combined_zemans <- readRDS("./data/b1/20211209_b1ko_data_zemans_data_integrated.rds")
+```
+
+```{r}
+epi_data_combined_zemans$merged_condition <- paste0(epi_data_combined_zemans$lab, " - ",
+                                                    epi_data_combined_zemans$injury, " - ",
+                                                    epi_data_combined_zemans$genotype)
+```
+
+```{r}
+DimPlot(epi_data_combined_zemans, group.by = "merged_condition")
+DimPlot(epi_data_combined_zemans, label = TRUE)
+
+```
+
+```{r}
+markers <- c(
+        "Hopx", "Aqp5", #AT1
+        "Sftpa1", "Sftpc", # AT2
+        "Fbln5", "Ager", # Transdifferentiating AT2
+        "Top2a", "Mki67", # Proliferating AT2
+        "Fn1", "Pdgfb", # Cell-cycle arrest AT2
+        "Foxj1", "Dynlrb2", # Ciliated
+        "Scgb1a1", "Scgb3a2" # Secretory
+)
+DotPlot(epi_data_combined_zemans, features = markers)
+
+```
+
+```{r}
+epi_data_combined_zemans_relabel <- epi_data_combined_zemans
+epi_data_combined_zemans_relabel$louvain <- Idents(epi_data_combined_zemans_relabel)
+epi_data_combined_zemans_relabel$celltype <- Idents(epi_data_combined_zemans_relabel)
+
+idxes <- levels(epi_data_combined_zemans_relabel$celltype)
+labels <- rep("AT2", length(levels(epi_data_combined_zemans_relabel$celltype)))
+labels[idxes %in% c(27)] <- "AT1"
+labels[idxes %in% c(18)] <- "Transdifferentiating AT2"
+labels[idxes %in% c(21)] <- "Proliferating AT2"
+labels[idxes %in% c(16)] <- "Cell Cycle Arrest AT2"
+labels[idxes %in% c(13, 14)] <- "Naive AT2"
+labels[idxes %in% c(22, 24)] <- "Ciliated"
+labels[idxes %in% c(15, 17)] <- "Secretory"
+labels[idxes %in% c(23, 25, 26)] <- "Other"
+labels
+
+levels(epi_data_combined_zemans_relabel$celltype) <- labels
+
+```
+
+```{r}
+DimPlot(epi_data_combined_zemans_relabel, group.by = "celltype")
+```
+
+```{r}
+FeaturePlot(epi_data_combined_zemans_relabel, features = "Lcn2")
+```
+
+
+
+```{r}
+celltype_order <- c("AT1", "AT2", "Transdifferentiating AT2", "Proliferating AT2", "Cell Cycle Arrest AT2", "Naive AT2", "Ciliated", "Secretory", "Other")
+epi_data_combined_zemans_relabel$celltype <- ordered(as.factor(epi_data_combined_zemans_relabel$celltype), celltype_order)
+```
+
+```{r}
+epi_data_combined_zemans_relabel$celltype <- ordered(epi_data_combined_zemans_relabel$celltype, rev(celltype_order))
+markers <- c(
+        "Hopx", "Aqp5", #AT1
+        "Sftpa1", "Sftpc", # AT2
+        "Fbln5", "Ager", # Transdifferentiating AT2
+        "Top2a", "Mki67", # Proliferating AT2
+        "Fn1", "Pdgfb", # Cell-cycle arrest AT2
+        "Foxj1", "Dynlrb2", # Ciliated
+        "Scgb1a1", "Scgb3a2" # Secretory
+)
+
+marker_dots <- DotPlot(epi_data_combined_zemans_relabel, group.by = "celltype", features = markers, dot.scale = 9) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "italic")) +
+        scale_color_distiller(palette = "Blues", direction = 1) +
+        xlab("Gene") +
+        ylab("Cell type")
+
+epi_data_combined_zemans_relabel$celltype <- ordered(epi_data_combined_zemans_relabel$celltype, celltype_order)
+marker_dots
+ggsave("./data/b1/figures/zemans_integration_epi_dotplot_markers.pdf", marker_dots, width = 9, height = 4)
+```
+
+
+
+
+
+
+
+
+```{r}
+epi_data_combined_zemans_relabel$lab[epi_data_combined_zemans_relabel$lab == "plosa"] <- "Plosa"
+epi_data_combined_zemans_relabel$lab[epi_data_combined_zemans_relabel$lab == "zemans"] <- "Zemans"
+epi_data_combined_zemans_relabel$genotype[is.na(epi_data_combined_zemans_relabel$genotype)] <- "WT"
+epi_data_combined_zemans_relabel$merged_condition <- paste0(epi_data_combined_zemans_relabel$lab, " - ",
+                                                            epi_data_combined_zemans_relabel$injury, " - ",
+                                                            epi_data_combined_zemans_relabel$genotype)
+```
+
+
+```{r}
+celltypes_plt <- ggplot() + umap_theme() +
+  ggrastr::rasterise(geom_point(data = epi_data_combined_zemans_relabel, aes(x = x, y = y, color = celltype), size = .1), dpi = 600) +
+  scale_colour_manual(name = "", values = color_category_20, guide = guide_legend(override.aes = list(size=3), order = 1)) +
+  theme(aspect.ratio=1,
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        panel.background = element_rect(fill = "transparent", colour = "black"),
+        plot.background = element_rect(color = "transparent", fill = "transparent"),
+        legend.background = element_rect(color = "transparent", fill = "transparent")) +
+  new_scale_color() +
+  ggtitle("Cell type") +
+  xlab("UMAP1") + ylab("UMAP2")
+celltypes_plt
+
+condition_plt <- ggplot() + umap_theme() +
+  ggrastr::rasterise(geom_point(data = epi_data_combined_zemans_relabel, aes(x = x, y = y, color = merged_condition), size = .1), dpi = 600) +
+  scale_colour_manual(name = "", values = color_scanpy_default, guide = guide_legend(override.aes = list(size=3), order = 1)) +
+  theme(aspect.ratio=1,
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        panel.background = element_rect(fill = "transparent", colour = "black"),
+        plot.background = element_rect(color = "transparent", fill = "transparent"),
+        legend.background = element_rect(color = "transparent", fill = "transparent")
+  ) +
+  new_scale_color() +
+  ggtitle("Condition") +
+  xlab("UMAP1") + ylab("UMAP2")
+condition_plt
+
+
+ggsave("./data/b1/figures/zemans_epi_UMAP_celltype.pdf",
+       gridExtra::grid.arrange(egg::set_panel_size(p=celltypes_plt, width=unit(8, "cm"), height=unit(8, "cm"))),
+       dpi = 300, bg = "transparent",
+       width=unit(6, "cm"), height=unit(5, "cm"))
+
+ggsave("./data/b1/figures/zemans_epi_UMAP_condition.pdf",
+       gridExtra::grid.arrange(egg::set_panel_size(p=condition_plt, width=unit(8, "cm"), height=unit(8, "cm"))),
+       dpi = 300, bg = "transparent",
+       width=unit(6, "cm"), height=unit(5, "cm"))
+
+
+```
+
+```{r}
+FeaturePlot(epi_data_combined_zemans_relabel, "Hopx") + theme(aspect.ratio = 1)
+```
+
+
+```{r}
+freq_table <- prop.table(table(epi_data_combined_zemans_relabel$celltype, epi_data_combined_zemans_relabel$merged_condition), margin = 2) * 100
+freq_table
+```
+
+```{r}
+keep_cells <- c("AT1",
+                "AT2",
+                "Transdifferentiating AT2",
+                "Proliferating AT2",
+                "Cell Cycle Arrest AT2",
+                "Naive AT2"
+)
+filter <- epi_data_combined_zemans_relabel$celltype %in% keep_cells
+freq_table <- prop.table(table(epi_data_combined_zemans_relabel$celltype[filter], epi_data_combined_zemans_relabel$merged_condition[filter]), margin = 2) * 100
+freq_table <- freq_table[keep_cells,]
+
+
+freq_df <- as.data.frame(freq_table)
+group_order <- c("Plosa - NT - WT", "Plosa - NT - B1", "Zemans - NT - WT",
+                 "Plosa - LPS - WT", "Plosa - LPS - B1", "Zemans - LPS - WT")
+freq_df$Var2 <- ordered(as.factor(freq_df$Var2), group_order)
+
+zemans_plosa_proportions <- ggplot(as.data.frame(freq_table),aes(x=ordered(Var2, group_order),y=Freq,fill=Var1)) +
+         geom_col() +
+         scale_fill_manual(values = color_category_20, name = "Cell type") +
+         xlab("Condition") +
+         ylab("Cell Proportion") +
+         theme(legend.text = element_markdown(size=12),
+               legend.title = element_text(size=12),
+               axis.text.x  = element_text(size=12, color = "black", angle = 45, hjust=1),
+               axis.text.y = element_text(size=12, color = "black"),
+               axis.title.x = element_text(size=12),
+               axis.title.y = element_text(size=12),
+               panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(),
+               panel.background = element_rect(fill = "transparent"),
+               aspect.ratio = 1.2) +
+        scale_x_discrete(expand = c(.05, .05)) +
+        scale_y_continuous(expand = c(.01,.01)) +
+        coord_fixed(0.05)
+zemans_plosa_proportions
+
+ggsave("./data/b1/figures/zemans_epi_proportions.pdf",
+       zemans_plosa_proportions,
+       dpi = 300, bg = "transparent",
+       width=unit(6, "cm"), height=unit(5, "cm"))
+
+```
+
+

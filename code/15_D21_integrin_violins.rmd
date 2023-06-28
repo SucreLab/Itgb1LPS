@@ -1,0 +1,202 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+#opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 14
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data_combined_all <- readRDS("./data/b1/20211216_schiller_plosa_integrated_D21.rds")
+plosa_epi_w_transfer_D21 <- readRDS("./data/b1/D21_b1_labeled_epithelium_lab_transfer.rds")
+```
+
+```{r}
+plosa_epi_w_transfer_D21$injury_genotype <- paste0(plosa_epi_w_transfer_D21$injury, " ", plosa_epi_w_transfer_D21$genotype)
+epi_data_combined_all$injury_genotype <- paste0(epi_data_combined_all$injury, " ", epi_data_combined_all$genotype)
+```
+
+```{r}
+DimPlot(subset(epi_data_combined_all, lab == "schiller"), group.by = "cell_type")
+DimPlot(subset(epi_data_combined_all, lab == "plosa"), group.by = "injury_genotype")
+```
+
+Heatmap for showing differentiation state - big buckets
+```{r}
+
+plosa_epi_w_transfer_reorg <- plosa_epi_w_transfer_D21
+groups <- c("B1 f/f LPS", "B1 KO LPS")
+groups_in_data <- rev(c("LPS WT", "LPS iKO"))  # injury_genotype
+genes <- c("Sftpc", "Sftpa1", "Abca3", "Aqp5", "Ager", "Pdpn", "Rtkn2", "Hopx", "Col4a3", "Fbln5", "Krt8", "Hbegf", "Areg")
+
+gene_categories <- c("AT2", "AT1")
+
+plosa_epi_w_transfer_reorg@meta.data$injury_genotype <- ordered(as.factor(plosa_epi_w_transfer_reorg$injury_genotype), groups_in_data)
+```
+
+```{r}
+DimPlot(plosa_epi_w_transfer_D21, group.by = "genotype")
+DimPlot(plosa_epi_w_transfer_D21, group.by = "injury")
+```
+
+```{r}
+
+plosa_epi_subset_schillerAT2 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "AT2 cells")
+plosa_epi_subset_schillerActAT2 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "activated AT2")
+plosa_epi_subset_schillerAT1 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "AT1 cells")
+plosa_epi_subset_schillerKrt8 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "Krt8 ADI")
+plosa_epi_subset_schillerAT2_w_activated <- subset(plosa_epi_w_transfer_reorg, predicted.id %in% c("AT2 cells", "activated AT2"))
+```
+
+```{r}
+DimPlot(plosa_epi_subset_schillerAT2_w_activated, group.by = "predicted.id")
+```
+
+```{r}
+GeomSplitViolin <- ggproto("GeomSplitViolin", GeomViolin,
+                           draw_group = function(self, data, ..., draw_quantiles = NULL) {
+                             data <- transform(data, xminv = x - violinwidth * (x - xmin), xmaxv = x + violinwidth * (xmax - x))
+
+                             fill <- data[1, "fill"]
+                             left_col <- "#1f77b4"
+                             #newdata <- plyr::arrange(transform(data, x = if (grp %% 2 == 1) xminv else xmaxv), if (grp %% 2 == 1) y else -y)
+                             newdata <- suppressWarnings(
+                               plyr::arrange(transform(data, x = if (fill == left_col) xminv else xmaxv), if (fill == left_col) y else -y)
+                             )
+                             #unique(data$fill)
+                             newdata <- rbind(newdata[1, ], newdata, newdata[nrow(newdata), ], newdata[1, ])
+                             newdata[c(1, nrow(newdata) - 1, nrow(newdata)), "x"] <- round(newdata[1, "x"])
+
+                             if (length(draw_quantiles) > 0 & !scales::zero_range(range(data$y))) {
+                               stopifnot(all(draw_quantiles >= 0), all(draw_quantiles <=
+                                                                         1))
+                               quantiles <- ggplot2:::create_quantile_segment_frame(data, draw_quantiles)
+                               aesthetics <- data[rep(1, nrow(quantiles)), setdiff(names(data), c("x", "y")), drop = FALSE]
+                               aesthetics$alpha <- rep(1, nrow(quantiles))
+                               both <- cbind(quantiles, aesthetics)
+                               quantile_grob <- GeomPath$draw_panel(both, ...)
+                               ggplot2:::ggname("geom_split_violin", grid::grobTree(GeomPolygon$draw_panel(newdata, ...), quantile_grob))
+                             }
+                             else {
+                               ggplot2:::ggname("geom_split_violin", GeomPolygon$draw_panel(newdata, ...))
+                             }
+                           })
+
+geom_split_violin <- function(mapping = NULL, data = NULL, stat = "ydensity", position = "identity", ...,
+                              draw_quantiles = NULL, trim = TRUE, scale = "area", na.rm = FALSE,
+                              show.legend = NA, inherit.aes = TRUE) {
+  layer(data = data, mapping = mapping, stat = stat, geom = GeomSplitViolin,
+        position = position, show.legend = show.legend, inherit.aes = inherit.aes,
+        params = list(trim = trim, scale = scale, draw_quantiles = draw_quantiles, na.rm = na.rm, ...))
+}
+
+```
+
+```{r}
+gene_of_interest <- c("Itgb1", "Itgav", "Itga5", "Itgb5", "Itgb6", "Itgb8", "Itga9")
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_reorg)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_reorg, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               condition = plosa_epi_w_transfer_reorg$genotype,
+               celltype = plosa_epi_w_transfer_reorg$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    print(gene)
+    return()
+  }
+
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype %in% c("AT2 cells", "activated AT2")),
+                    aes(x = ordered(gene, gene_of_interest),
+                        fill = ordered(condition, c("WT", "iKO")),
+                        y = expression)) +
+        geom_split_violin(scale = "width") +
+        #geom_quasirandom(dodge.width = 0.5) +
+        geom_point(aes(group = ordered(condition, c("WT", "iKO"))), position=position_jitterdodge(dodge.width = 0.55), size = 0.5) +
+        #xlab("Time") +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default, name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "white", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "white"),
+              legend.background = element_rect(color = "transparent", fill = "white"),
+              axis.title.x = element_blank()) +
+        ggtitle(paste0("Expression in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/figures/grant/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/Markers_D21_SPLIT_",celltype_of_interest,".png"), all_vln_p, width = 10, scale = 1)
+```
+
+```{r}
+
+# Cell, gene, timepoint, condition
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_reorg)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_reorg, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               genotype = plosa_epi_w_transfer_reorg$genotype,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+
+}) %>% do.call(rbind, .)
+
+wide_exp_data$celltype <- as.factor(wide_exp_data$celltype)
+
+zero_filter <- wide_exp_data %>%
+  group_by(genotype, gene) %>%
+  summarize(is_zero = max(expression)) %>%
+  group_by(genotype, gene) %>% summarize(test = min(is_zero))
+
+drop_these_zero <- zero_filter %>% filter(test == 0)
+
+drop_these <- drop_these_zero
+
+drop_these$comb <- paste(drop_these$genotype, drop_these$gene, sep = "_")
+wide_exp_data$comb <- paste(wide_exp_data$genotype, wide_exp_data$gene, sep = "_")
+
+wide_exp_data_filt <- wide_exp_data[!wide_exp_data$comb %in% drop_these$comb,]
+
+
+stat_tests_d <- wide_exp_data_filt %>% group_by(gene) %>%
+  pairwise_wilcox_test(
+    expression ~ genotype,
+    p.adjust.method = "bonferroni",
+    detailed = TRUE
+  )
+
+stat_tests_padj <- stat_tests_d %>% adjust_pvalue(method = "holm") %>% add_significance(p.col = "p.adj") %>% arrange(gene)
+
+write.xlsx(stat_tests_padj, "./data/b1/figures/violin/Markers_D21_SPLIT_stats.xlsx")
+```

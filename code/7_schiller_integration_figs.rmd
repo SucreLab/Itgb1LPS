@@ -1,0 +1,675 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+#opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 14
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data_combined_all <- readRDS("./data/b1/20211216_schiller_plosa_integrated.rds")
+plosa_epi_w_transfer <- readRDS("./data/b1/b1_labeled_epithelium_lab_transfer.rds")
+```
+
+```{r}
+plosa_epi_w_transfer$injury_genotype <- paste0(plosa_epi_w_transfer$injury, " ", plosa_epi_w_transfer$genotype)
+epi_data_combined_all$injury_genotype <- paste0(epi_data_combined_all$injury, " ", epi_data_combined_all$genotype)
+```
+
+```{r}
+subcelltypes_plt <- DimPlot(plosa_epi_w_transfer, group.by = "predicted.id") +
+  umap_theme() +
+  scale_colour_manual(values = color_category_20) +
+  ggtitle("Cluster")
+
+injury_plt <- DimPlot(plosa_epi_w_transfer, group.by = "injury") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Treatment")
+
+genotype_plt <- DimPlot(plosa_epi_w_transfer, group.by = "genotype") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/prelim_schiller/transferred_UMAP.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+plosa_epi_w_transfer_ko <- subset(plosa_epi_w_transfer, genotype == "B1")
+plosa_epi_w_transfer_wt <- subset(plosa_epi_w_transfer, genotype == "WT" & predicted.id != "basal cells")
+
+```
+
+```{r}
+subcelltypes_plt <- DimPlot(plosa_epi_w_transfer_ko, group.by = "predicted.id") +
+  umap_theme() +
+  scale_colour_manual(values = color_category_20) +
+  ggtitle("Cluster")
+
+injury_plt <- DimPlot(plosa_epi_w_transfer_ko, group.by = "injury") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Treatment")
+
+genotype_plt <- DimPlot(plosa_epi_w_transfer_ko, group.by = "genotype") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/prelim_schiller/transferred_UMAP_ko.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+subcelltypes_plt <- DimPlot(plosa_epi_w_transfer_wt, group.by = "predicted.id") +
+  umap_theme() +
+  scale_colour_manual(values = color_category_20) +
+  ggtitle("Cluster")
+
+injury_plt <- DimPlot(plosa_epi_w_transfer_wt, group.by = "injury") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Treatment")
+
+genotype_plt <- DimPlot(plosa_epi_w_transfer_wt, group.by = "genotype") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/prelim_schiller/transferred_UMAP_wt.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+plosa_epi_w_transfer$injury <- ordered(as.factor(plosa_epi_w_transfer$injury), c("NT", "LPS"))
+plosa_epi_w_transfer$genotype <- ordered(as.factor(plosa_epi_w_transfer$genotype), c("WT", "B1"))
+```
+
+```{r}
+mouse_nfkb_mod2 <- list(c("Tnfsf13b","Ccl5","Ccl17","Gm2564","Ccl22","Cxcl10","Cxcl2","Cxcl1","Ifng","Il1a","Il1b","Il1rn","Il6","Il10","Il12b","Il12a","Il23a","Ebi3","Lta","Ltb","Ccl12","Ccl4","Tnf","Tnfsf10","Tnfsf15","Cd80","Ccr5","Ccr7","Tnfrsf9","Cd3g","Cr2","Cd38","Cd40","Cd48","Cd83","Cd86","Slc3a2","Tnfrsf4","Fcgrt","Fcer2a","H2-M3","Il2ra","B2m","Nod2","Pglyrp1","Tlr2","Tlr9","Trem1","Cfb","C3","Psmb9","Tap1","Tapbp","Cd44","Eng","Fn1","Selp","Vcam1","C4b","Lbp","F3","Plau","Cyp7b1","Ptgs2","Fth1","Gclc","Gclm","Hsp90aa1","Senp2","Sod1","Sod2","Nqo1","Abca1","Adora2a","Scnn1a","Oprd1","Egfr","Erbb2","Olr1","Abcb4","Ptafr","Abcb1a","Ager","Pycard","Bax","Bcl2a1a","Bcl2a1b","Bcl2a1d","Bcl2l1","Bcl2","Bcl2l11","Cd274","Bnip3","Casp4","Cflar","Fas","Fasl","Ier3","Traf1","Traf2","Xiap","Inhba","Angpt1","Blnk","Bmp2","Bmp4","Calca","Fstl3","Csf3","Csf2","Csf1","Mdk","Spp1","Pdgfb","Pigf","Penk","Kitl","Vegfc","Tnfaip3","Tnip3","Ar","Bcl3","Myb","Myc","Rel","Cebpd","E2f3","Gata3","Hif1a","Hoxa9","Irf1","Irf2","Irf4","Irf7","Nfkbia","Nfkbie","Junb","Lef1","Creb3","Nfkbiz","Nfkb2","Nfkb1","Nr4a2","Trp53","Spi1","Relb","Snai1","Stat5a","Tfec","Yy1","Aicda","Amacr","Arfrp1","Ass1","Bace1","Btk","Ctsb","Cdk6","Chil1","Dnase1l2","Lipg","St8sia1","Mmp9","Gstp1","Gstp2","Hmox1","Hsd11b2","Lyz2","Lyz1","Mthfr","Mylk","Pim1","Plk3","Pik3ca","Prkaca","Prkcd","Plcd1","Ptpn1","St6gal1","Nuak2","Sat1","Tert","Tgm1","Tgm2","Pafah2","Upp1","Asph","Afp","Amh","Apobec2","Apoe","Brca2","Col1a2","Ccnd1","Ccnd2","Slc11a2","Edn1","Epha1","F8","Gadd45b","Gnai2","Lgals3","Hmgn1","Lamb2","Lcn2","S100a4","Serpinb1a","Mbp","Slc16a1","Tnip1","Psme1","Psme2","Prf1","Ppargc1b","Pomc","Pten","Rbbp4","Serpine2","S100a6","Sh3bgrl","Skp2","Sdc4","Slc6a6","Kcnk5","Ticam1","Trpc1","Cyp27b1","Vim"))
+
+mouse_nfkb_var <- list(mouse_nfkb_mod2[[1]][mouse_nfkb_mod2[[1]] %in% VariableFeatures(plosa_epi_w_transfer)])
+
+plosa_epi_w_transfer <- AddModuleScore(plosa_epi_w_transfer, mouse_nfkb_var, name = "nf_kb_score", nbin = 10)
+```
+
+```{r}
+plosa_epi_w_transfer$predicted.id.condition <- paste0(plosa_epi_w_transfer$predicted.id, " - ", plosa_epi_w_transfer$injury)
+
+```
+
+```{r}
+at2_adi_only <- subset(plosa_epi_w_transfer, predicted.id %in% c("activated AT2", "AT2 cells", "Krt8 ADI"))
+at2_adi_only$predicted.id.condition <- ordered(as.factor(at2_adi_only$predicted.id.condition),
+                                               c("activated AT2 - NT", "activated AT2 - LPS",
+                                                 "AT2 cells - NT", "AT2 cells - LPS",
+                                                 "Krt8 ADI - NT", "Krt8 ADI - LPS"
+))
+```
+
+```{r}
+vln_abca3_adi <- VlnPlot(at2_adi_only, group.by = "predicted.id.condition", features = "Abca3", split.by = "genotype")  +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+              plot.title = element_text(face = "italic"))
+
+vln_abca3_adi
+ggsave("./data/b1/figures/vln_at2_adi_Abca3.pdf", vln_abca3_adi, width = 7, height = 5)
+```
+
+```{r}
+vln_ager_adi <- VlnPlot(at2_adi_only, group.by = "predicted.id.condition", features = "Ager", split.by = "genotype")  +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+              plot.title = element_text(face = "italic"))
+
+vln_ager_adi
+ggsave("./data/b1/figures/vln_at2_adi_Ager.pdf", vln_ager_adi, width = 7, height = 5)
+```
+
+```{r}
+vln_Aqp5_adi <- VlnPlot(at2_adi_only, group.by = "predicted.id.condition", features = "Aqp5", split.by = "genotype")  +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+              plot.title = element_text(face = "italic"))
+
+vln_Aqp5_adi
+ggsave("./data/b1/figures/vln_at2_adi_Aqp5.pdf", vln_Aqp5_adi, width = 7, height = 5)
+```
+
+```{r}
+vln_col4a3_adi <- VlnPlot(at2_adi_only, group.by = "predicted.id.condition", features = "Col4a3", split.by = "genotype")  +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+              plot.title = element_text(face = "italic"))
+
+vln_col4a3_adi
+ggsave("./data/b1/figures/vln_at2_adi_Col4a3.pdf", vln_col4a3_adi, width = 7, height = 5)
+```
+
+```{r}
+vln_nf_kb_adi <- VlnPlot(at2_adi_only, group.by = "predicted.id.condition", features = "nf_kb_score1", split.by = "genotype")  +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+              plot.title = element_text(face = "plain")) +
+        ggtitle("NF-kB score")
+
+vln_nf_kb_adi
+ggsave("./data/b1/figures/vln_at2_adi_nf_kb.pdf", vln_nf_kb_adi, width = 7, height = 5)
+```
+
+```{r}
+vln_malt1_adi <- VlnPlot(at2_adi_only, group.by = "predicted.id.condition", features = "Malt1", split.by = "genotype")  +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+              plot.title = element_text(face = "italic"))
+
+vln_malt1_adi
+ggsave("./data/b1/figures/vln_at2_adi_malt1.pdf", vln_malt1_adi, width = 7, height = 5)
+```
+
+
+
+```{r}
+writeAnnData <- function(seurat_obj, filename){
+  anndata::AnnData(X = t(GetAssayData(seurat_obj, slot = "data", assay = "SCT")),
+                   var = data.frame(gene = rownames(seurat_obj),
+                                    row.names = rownames(seurat_obj)),
+                   obs = data.frame(cell_type = as.character(seurat_obj$celltype),
+                                    transfer_cell_type = as.character(seurat_obj$predicted.id),
+                                    louvain = as.character(seurat_obj$seurat_clusters),
+                                    genotype = as.character(seurat_obj$genotype),
+                                    injury = as.character(seurat_obj$injury),
+                                    genotype = as.character(seurat_obj$genotype),
+                                    seq_run = as.character(seurat_obj$orig.ident),
+                                    row.names = colnames(seurat_obj)),
+                   obsm = list(X_umap = matrix(Embeddings(seurat_obj, reduction = "umap"), ncol = 2))
+  )$write_h5ad(filename, compression = "gzip")
+}
+
+filename <- "./b1_epi_with_transfer_labels.h5ad"
+if (!file.exists(filename)) { # Create if doesn't exist
+  writeAnnData(plosa_epi_w_transfer, filename)
+}
+```
+
+```{r}
+data <- plosa_epi_w_transfer
+```
+
+```{r}
+N_WORKERS <- 12
+Idents(data) <- data$predicted.id
+plan("multiprocess", workers = N_WORKERS)
+filename <- "./data/20211220_epi_transfer_labs_markers_celltype.rds"
+if (!file.exists(filename)) {
+  epi_xfer_markers <- future_lapply(levels(Idents(data)), function(x){ # Five expression patterns
+
+    obj_celltype <- subset(data, predicted.id == x)
+    if (sum(obj_celltype$genotype == "WT") < 2 | sum(obj_celltype$genotype == "B1") < 2){
+      return(data.frame())
+    } else {
+      FindMarkers(data, ident.1 = "WT", ident.2 = "B1", group.by = "genotype", test.use = "MAST")
+    }
+  })
+  names(epi_xfer_markers) <- levels(Idents(data))
+  saveRDS(epi_xfer_markers, filename)
+} else {
+  epi_xfer_markers <- readRDS(filename)
+}
+
+
+
+wb_markers_names <- levels(Idents(data))
+wb_markers <- createWorkbook()
+for (idx in seq_along(wb_markers_names)){
+  addWorksheet(wb_markers, wb_markers_names[idx])
+  writeData(wb_markers, wb_markers_names[idx], epi_xfer_markers[[idx]], rowNames = TRUE)
+}
+saveWorkbook(wb_markers, file = "./data/20211220_epi_transfer_labs_markers_celltype.xlsx", overwrite = TRUE)
+```
+
+
+```{r}
+plosa_epi_w_transfer$condition <- paste0(plosa_epi_w_transfer$genotype, " - ", plosa_epi_w_transfer$injury)
+```
+
+```{r}
+schillerxfer_celltype_order <- c("activated AT2", "AT2 cells", "Krt8 ADI", "AT1 cells", "activated ciliated cells", "activated club cells", "basal cells", "ciliated cells", "club cells", "goblet cells", "proliferation")
+
+schiller_subcelltypes_plt <- ggplot() + umap_theme() +
+        ggrastr::rasterise(geom_point(data = plosa_epi_w_transfer,
+                                      aes(x = x, y = y, color = ordered(predicted.id, schillerxfer_celltype_order)), size = .1), dpi = 600) +
+        scale_colour_manual(name = "", values = color_category_20, guide = guide_legend(override.aes = list(size=3), order = 1)) +
+        theme(aspect.ratio=1,
+              legend.text=element_text(size=12),
+              legend.title=element_text(size=12),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent")) +
+        new_scale_color() +
+        ggtitle("Cell type") +
+        xlab("UMAP1") + ylab("UMAP2")
+schiller_subcelltypes_plt
+
+
+ggsave("./data/b1/figures/schiller_merge_epi_UMAP_celltype.pdf",
+       gridExtra::grid.arrange(egg::set_panel_size(p=schiller_subcelltypes_plt, width=unit(7, "cm"), height=unit(7, "cm"))),
+       dpi = 300, bg = "transparent",
+       width=unit(6, "cm"), height=unit(5, "cm"))
+
+ggsave("./data/b1/figures/schiller_merge_epi_UMAP_celltype.tiff",
+       gridExtra::grid.arrange(egg::set_panel_size(p=schiller_subcelltypes_plt, width=unit(7, "cm"), height=unit(7, "cm"))),
+       dpi = 400, bg = "transparent",
+       width=unit(6, "cm"), height=unit(5, "cm"))
+
+
+```
+
+```{r}
+freq_table_schiller <- prop.table(table(plosa_epi_w_transfer$predicted.id, plosa_epi_w_transfer$condition), margin = 2) * 100
+freq_table_schiller
+```
+
+```{r}
+filter <- plosa_epi_w_transfer$predicted.id %in% c("activated AT2",
+                                               "AT1 cells",
+                                               "AT2 cells",
+                                               "Krt8 ADI")
+freq_table_schiller <- prop.table(table(plosa_epi_w_transfer$predicted.id[filter], plosa_epi_w_transfer$condition[filter]), margin = 2) * 100
+freq_table_schiller
+
+
+freq_df_schiller <- as.data.frame(freq_table_schiller)
+group_order <- c("WT - NT", "B1 - NT",
+                 "WT - LPS", "B1 - LPS")
+freq_df_schiller$Var2 <- ordered(as.factor(freq_df_schiller$Var2), group_order)
+
+schiller_plosa_proportions <- ggplot(freq_df_schiller,aes(x=ordered(Var2, group_order),y=Freq,fill=Var1)) +
+        geom_col() +
+        scale_fill_manual(values = color_category_20[c(1, 4, 5, 10)], name = "Cell type") +
+        xlab("Condition") +
+        ylab("Cell Proportion") +
+        theme(legend.text = element_markdown(size=12),
+              legend.title = element_text(size=12),
+              axis.text.x  = element_text(size=12, color = "black", angle = 45, hjust=1),
+              axis.text.y = element_text(size=12, color = "black"),
+              axis.title.x = element_text(size=12),
+              axis.title.y = element_text(size=12),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent"),
+              aspect.ratio = 1.2) +
+        scale_x_discrete(expand = c(.05, .05)) +
+        scale_y_continuous(expand = c(.01,.01)) +
+        coord_fixed(0.05)
+schiller_plosa_proportions
+
+ggsave("./data/b1/figures/schiller_epi_proportions.pdf",
+       schiller_plosa_proportions,
+       dpi = 300, bg = "transparent",
+       width=unit(6, "cm"), height=unit(5, "cm"))
+
+```
+
+```{r}
+
+test_celltypes <- c("AT2 cells", "activated AT2", "Krt8 ADI", "AT1 cells")
+celltype_markers <- lapply(test_celltypes, function(x){
+  # LPS only - WT vs B1
+  # NT only - WT vs B1
+  # B1 only - NT vs LPS
+  # WT only - NT vs LPS
+  print(x)
+  celltype_only <- subset(plosa_epi_w_transfer, predicted.id == x)
+  cell_numbers <- table(celltype_only$injury, celltype_only$genotype)
+
+  print(cell_numbers)
+  if (min(cell_numbers["LPS",]) > 5) {
+    lps_WT_vs_B1 <- FindMarkers(subset(celltype_only, injury == "LPS"), group.by = "genotype", "B1", "WT", test.use = "MAST")
+  } else {
+    lps_WT_vs_B1 <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+  if (min(cell_numbers["NT",]) > 5) {
+    nt_WT_vs_B1 <- FindMarkers(subset(celltype_only, injury == "NT"), group.by = "genotype", "B1", "WT", test.use = "MAST")
+  } else {
+    nt_WT_vs_B1 <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+  if (min(cell_numbers[,"B1"]) > 5) {
+    b1_NT_vs_LPS <- FindMarkers(subset(celltype_only, genotype == "B1"), group.by = "injury", "LPS", "NT", test.use = "MAST")
+  } else {
+    b1_NT_vs_LPS <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+  if (min(cell_numbers[,"WT"]) > 5) {
+    wt_NT_vs_LPS <- FindMarkers(subset(celltype_only, genotype == "WT"), group.by = "injury", "LPS", "NT", test.use = "MAST")
+  } else {
+    wt_NT_vs_LPS <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+
+  out <- list(nt_WT_vs_B1 = lps_WT_vs_B1,
+              nt_WT_vs_B1 = nt_WT_vs_B1,
+              b1_NT_vs_LPS = b1_NT_vs_LPS,
+              wt_NT_vs_LPS = wt_NT_vs_LPS
+  )
+  return(out)
+
+})
+names(celltype_markers) <- test_celltypes
+
+
+df_markers_ipa <- lapply(test_celltypes, function(x){
+  print(x)
+  in_single <- celltype_markers[[x]]
+  names(in_single) <- c("LPS B1 vs WT", "NT B1 vs WT", "B1 LPS vs NT", "WT LPS vs NT")
+  out <- lapply(c("LPS B1 vs WT", "NT B1 vs WT", "B1 LPS vs NT", "WT LPS vs NT"), function(z){
+    out <- in_single[[z]][rownames(plosa_epi_w_transfer), c("avg_log2FC", "p_val_adj")]
+    new_colnames <- as.vector(sapply(c("avg_log2FC", "p_val_adj"), function(y) { paste0(z, " - ", y) }))
+    colnames(out) <- new_colnames
+    rownames(out) <- rownames(plosa_epi_w_transfer)
+    return(out)
+  })  %>% do.call(cbind, .)
+
+  new_colnames <- paste0(x, "; ", colnames(out))
+  colnames(out) <- new_colnames
+  return(out)
+
+
+}) %>% do.call(cbind, .)
+
+# Keep only rows that are not ALL NA
+#df_markers_ipa <- df_markers_ipa[apply(df_markers_ipa, 1, function(x){ all(!is.na(x))}),]
+write.xlsx(df_markers_ipa, file = "./data/b1/markers_xfer_celltype_plosa_b1_IPA_correct_direction.xlsx",
+           overwrite = TRUE, rowNames = TRUE)
+
+```
+
+```{r}
+
+test_celltypes <- c("AT2 merge")
+celltype_markers <- lapply(test_celltypes, function(x){
+  # LPS only - WT vs B1
+  # NT only - WT vs B1
+  # B1 only - NT vs LPS
+  # WT only - NT vs LPS
+  print(x)
+  celltype_only <- subset(plosa_epi_w_transfer, predicted.id %in% c("AT2 cells", "activated AT2"))
+  cell_numbers <- table(celltype_only$injury, celltype_only$genotype)
+
+  print(cell_numbers)
+  if (min(cell_numbers["LPS",]) > 5) {
+    lps_WT_vs_B1 <- FindMarkers(subset(celltype_only, injury == "LPS"), group.by = "genotype", "B1", "WT", test.use = "MAST")
+  } else {
+    lps_WT_vs_B1 <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+  if (min(cell_numbers["NT",]) > 5) {
+    nt_WT_vs_B1 <- FindMarkers(subset(celltype_only, injury == "NT"), group.by = "genotype", "B1", "WT", test.use = "MAST")
+  } else {
+    nt_WT_vs_B1 <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+  if (min(cell_numbers[,"B1"]) > 5) {
+    b1_NT_vs_LPS <- FindMarkers(subset(celltype_only, genotype == "B1"), group.by = "injury", "LPS", "NT", test.use = "MAST")
+  } else {
+    b1_NT_vs_LPS <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+  if (min(cell_numbers[,"WT"]) > 5) {
+    wt_NT_vs_LPS <- FindMarkers(subset(celltype_only, genotype == "WT"), group.by = "injury", "LPS", "NT", test.use = "MAST")
+  } else {
+    wt_NT_vs_LPS <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+
+  out <- list(nt_WT_vs_B1 = lps_WT_vs_B1,
+              nt_WT_vs_B1 = nt_WT_vs_B1,
+              b1_NT_vs_LPS = b1_NT_vs_LPS,
+              wt_NT_vs_LPS = wt_NT_vs_LPS
+  )
+  return(out)
+
+})
+names(celltype_markers) <- test_celltypes
+
+
+df_markers_ipa <- lapply(test_celltypes, function(x){
+  print(x)
+  in_single <- celltype_markers[[x]]
+  names(in_single) <- c("LPS B1 vs WT", "NT B1 vs WT", "B1 LPS vs NT", "WT LPS vs NT")
+  out <- lapply(c("LPS B1 vs WT", "NT B1 vs WT", "B1 LPS vs NT", "WT LPS vs NT"), function(z){
+    out <- in_single[[z]][rownames(plosa_epi_w_transfer), c("avg_log2FC", "p_val_adj")]
+    new_colnames <- as.vector(sapply(c("avg_log2FC", "p_val_adj"), function(y) { paste0(z, " - ", y) }))
+    colnames(out) <- new_colnames
+    rownames(out) <- rownames(plosa_epi_w_transfer)
+    return(out)
+  })  %>% do.call(cbind, .)
+
+  new_colnames <- paste0(x, "; ", colnames(out))
+  colnames(out) <- new_colnames
+  return(out)
+
+
+}) %>% do.call(cbind, .)
+
+# Keep only rows that are not ALL NA
+#df_markers_ipa <- df_markers_ipa[apply(df_markers_ipa, 1, function(x){ all(!is.na(x))}),]
+write.xlsx(df_markers_ipa, file = "./data/b1/markers_xfer_celltype_plosa_b1_IPA_correct_direction_AT2_merge.xlsx",
+           overwrite = TRUE, rowNames = TRUE)
+
+
+
+```
+
+```{r}
+
+test_celltypes <- c("AT2")
+celltype_markers <- lapply(test_celltypes, function(x){
+  # LPS only - WT vs B1
+  # NT only - WT vs B1
+  # B1 only - NT vs LPS
+  # WT only - NT vs LPS
+  print(x)
+  celltype_only <- subset(plosa_epi_w_transfer, celltype == x)
+  cell_numbers <- table(celltype_only$injury, celltype_only$genotype)
+
+  print(cell_numbers)
+  if (min(cell_numbers["LPS",]) > 5) {
+    lps_WT_vs_B1 <- FindMarkers(subset(celltype_only, injury == "LPS"), group.by = "genotype", "B1", "WT")
+  } else {
+    lps_WT_vs_B1 <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+  if (min(cell_numbers["NT",]) > 5) {
+    nt_WT_vs_B1 <- FindMarkers(subset(celltype_only, injury == "NT"), group.by = "genotype", "B1", "WT")
+  } else {
+    nt_WT_vs_B1 <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+  if (min(cell_numbers[,"B1"]) > 5) {
+    b1_NT_vs_LPS <- FindMarkers(subset(celltype_only, genotype == "B1"), group.by = "injury", "LPS", "NT")
+  } else {
+    b1_NT_vs_LPS <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+  if (min(cell_numbers[,"WT"]) > 5) {
+    wt_NT_vs_LPS <- FindMarkers(subset(celltype_only, genotype == "WT"), group.by = "injury", "LPS", "NT")
+  } else {
+    wt_NT_vs_LPS <- data.frame(avg_log2FC = "", p_val_adj= "")
+  }
+
+
+  out <- list(nt_WT_vs_B1 = lps_WT_vs_B1,
+              nt_WT_vs_B1 = nt_WT_vs_B1,
+              b1_NT_vs_LPS = b1_NT_vs_LPS,
+              wt_NT_vs_LPS = wt_NT_vs_LPS
+  )
+  return(out)
+
+})
+names(celltype_markers) <- test_celltypes
+
+
+df_markers_ipa <- lapply(test_celltypes, function(x){
+  print(x)
+  in_single <- celltype_markers[[x]]
+  names(in_single) <- c("LPS WT vs B1", "NT WT vs B1", "B1 NT vs LPS", "WT NT vs LPS")
+  out <- lapply(c("LPS WT vs B1", "NT WT vs B1", "B1 NT vs LPS", "WT NT vs LPS"), function(z){
+    out <- in_single[[z]][rownames(plosa_epi_w_transfer), c("avg_log2FC", "p_val_adj")]
+    new_colnames <- as.vector(sapply(c("avg_log2FC", "p_val_adj"), function(y) { paste0(z, " - ", y) }))
+    colnames(out) <- new_colnames
+    rownames(out) <- rownames(plosa_epi_w_transfer)
+    return(out)
+  })  %>% do.call(cbind, .)
+
+  new_colnames <- paste0(x, "; ", colnames(out))
+  colnames(out) <- new_colnames
+  return(out)
+
+
+}) %>% do.call(cbind, .)
+
+# Keep only rows that are not ALL NA
+#df_markers_ipa <- df_markers_ipa[apply(df_markers_ipa, 1, function(x){ all(!is.na(x))}),]
+write.xlsx(df_markers_ipa, file = "./data/b1/markers_AT2_celltype_plosa_b1_IPA_correct_direction.xlsx",
+           overwrite = TRUE, rowNames = TRUE)
+
+```
+
+```{r}
+activated_at2_only <- subset(plosa_epi_w_transfer, predicted.id %in% c("activated AT2"))
+```
+
+```{r}
+activated_at2_lps_b1_vs_wt_markers <- FindMarkers(subset(activated_at2_only, injury == "LPS"),
+                                                  group.by = "genotype", "B1", "WT", test.use = "MAST")
+write.xlsx(activated_at2_lps_b1_vs_wt_markers, "./data/b1/figures/prelim_DE/activated_AT2_LPS_only_B1_vs_WT.xlsx", rowNames = TRUE, overwrite = TRUE)
+```
+
+```{r}
+table(activated_at2_only$injury, activated_at2_only$genotype)
+```
+
+```{r}
+activated_at2_nt_b1_vs_wt_markers <- FindMarkers(subset(activated_at2_only, injury == "NT"),
+                                                  group.by = "genotype", "B1", "WT", test.use = "MAST")
+write.xlsx(activated_at2_nt_b1_vs_wt_markers, "./data/b1/figures/prelim_DE/activated_AT2_NT_only_B1_vs_WT.xlsx", rowNames = TRUE, overwrite = TRUE)
+```
+
+
+```{r}
+plosa_epi_w_transfer_reorg <- plosa_epi_w_transfer
+```
+
+Heatmap for showing differentiation state - big buckets
+```{r}
+
+groups <- c("B1 f/f- PBS", "B1 f/f- LPS", "B1 KO PBS", "B1 KO LPS")
+groups_in_data <- rev(c("NT WT", "LPS WT", "NT B1", "LPS B1"))  # injury_genotype
+genes <- c("Sftpc", "Sftpa1", "Abca3", "Aqp5", "Ager", "Pdpn", "Rtkn2", "Hopx", "Col4a3", "Fbln5", "Krt8", "Hbegf", "Areg")
+
+gene_categories <- c("AT2", "AT1")
+
+plosa_epi_w_transfer_reorg@meta.data$injury_genotype <- ordered(as.factor(plosa_epi_w_transfer_reorg$injury_genotype), groups_in_data)
+```
+
+```{r}
+plosa_epi_subset_bigAT2 <- subset(plosa_epi_w_transfer_reorg, celltype == "AT2")
+plosa_epi_subset_bigAT1 <- subset(plosa_epi_w_transfer_reorg, celltype == "AT1")
+
+plosa_epi_subset_schillerAT2 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "AT2 cells")
+plosa_epi_subset_schillerActAT2 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "activated AT2")
+plosa_epi_subset_schillerAT1 <- subset(plosa_epi_w_transfer_reorg, predicted.id == "AT1 cells")
+plosa_epi_subset_schillerKrt8<- subset(plosa_epi_w_transfer_reorg, predicted.id == "Krt8 ADI")
+plosa_epi_subset_schillerAT2_w_activated<- subset(plosa_epi_w_transfer_reorg, predicted.id %in% c("AT2 cells", "activated AT2"))
+```
+
+```{r}
+table(plosa_epi_w_transfer_reorg$injury, plosa_epi_w_transfer_reorg$predicted.id, plosa_epi_w_transfer_reorg$genotype)
+```
+
+```{r}
+
+markers_shiller_at2 <- DotPlot(plosa_epi_subset_schillerAT2, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1) +
+        ggtitle("AT2 cells")
+markers_shiller_at2
+
+
+markers_shiller_ActAt2 <- DotPlot(plosa_epi_subset_schillerActAT2, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1) +
+        ggtitle("Activated AT2 cells")
+markers_shiller_ActAt2
+
+markers_shiller_at1 <- DotPlot(plosa_epi_subset_schillerAT1, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("AT1 cells")
+markers_shiller_at1
+
+markers_shiller_at1 <- DotPlot(plosa_epi_subset_schillerAT1, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("AT1 cells")
+markers_shiller_at1
+
+markers_shiller_krt8 <- DotPlot(plosa_epi_subset_schillerKrt8, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("Krt8-hi cells")
+markers_shiller_krt8
+
+markers_shiller_at2_w_activated<- DotPlot(plosa_epi_subset_schillerAT2_w_activated, group.by = "injury_genotype", features = genes, dot.scale = 10) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1, face = "italic"),
+              axis.title = element_blank()) +
+        scale_color_distiller(palette = "Blues", direction = 1)+
+        ggtitle("AT2 with activated cells")
+markers_shiller_at2_w_activated
+
+ggsave("./data/b1/figures/dotplot_at1_2_markers_schiller_AT2_with_activated_at2_v2.pdf", markers_shiller_at2_w_activated, width = 7.5, height = 4)
+ggsave("./data/b1/figures/dotplot_at1_2_markers_schiller_AT2_v2.pdf", markers_shiller_at2, width = 7.5, height = 4)
+ggsave("./data/b1/figures/dotplot_at1_2_markers_schiller_ActAT2_v2.pdf", markers_shiller_ActAt2, width = 7.5, height = 4)
+ggsave("./data/b1/figures/dotplot_at1_2_markers_schiller_ActAT1_v2.pdf", markers_shiller_at1, width = 7.5, height = 4)
+ggsave("./data/b1/figures/dotplot_at1_2_markers_schiller_krt8_v2.pdf", markers_shiller_krt8, width = 7.5, height = 4)
+
+```
+
+
+

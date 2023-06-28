@@ -1,0 +1,865 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 1/19/22
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+#opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 14
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data_combined_all <- readRDS("./data/b1/20211216_schiller_plosa_integrated.rds")
+plosa_epi_w_transfer_D7 <- readRDS("./data/b1/b1_labeled_epithelium_lab_transfer.rds")
+plosa_epi_original_D21 <- readRDS("./data/b1/D21_b1_labeled_epithelium_lab_transfer.rds")
+```
+
+```{r}
+plosa_epi_w_transfer_D7$injury_genotype <- paste0(plosa_epi_w_transfer_D7$injury, " ", plosa_epi_w_transfer_D7$genotype)
+```
+```{r}
+test_plot <- VlnPlot(plosa_epi_w_transfer_D7, "Ezr", group.by = "injury_genotype")
+
+ggsave("./data/b1/figures/test.png", test_plot)
+```
+
+```{r}
+gene_of_interest <- "Ezr"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+  geom_violin(scale = "width") +
+  geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+  ylab("Expression") +
+  scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+  theme(axis.text = element_text(color = "black"),
+        panel.background = element_rect(fill = "transparent", colour = "black"),
+        plot.background = element_rect(color = "transparent", fill = "transparent"),
+        legend.background = element_rect(color = "transparent", fill = "transparent"),
+        axis.title.x = element_blank()
+        ) +
+  ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+
+```{r}
+gene_of_interest <- "Epas1"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+```{r}
+gene_of_interest <- "Sftpc"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+```{r}
+gene_of_interest <- "Krt8"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+```{r}
+gene_of_interest <- "Sftpc"
+celltype_of_interest <- "Krt8 ADI"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+
+```{r}
+plosa_epi_original_D21$injury_genotype <- paste0(plosa_epi_original_D21$injury, " ", plosa_epi_original_D21$genotype)
+```
+
+# plosa_epi_original_D21
+```{r}
+gene_of_interest <- "Sftpc"
+celltype_of_interest <- "Krt8 ADI"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_original_D21)){
+    exp_data <- GetAssayData(plosa_epi_original_D21, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_original_D21$injury_genotype,
+               celltype = plosa_epi_original_D21$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("LPS WT", "LPS iKO")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D21_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+```{r}
+gene_of_interest <- "Sftpc"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_original_D21)){
+    exp_data <- GetAssayData(plosa_epi_original_D21, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_original_D21$injury_genotype,
+               celltype = plosa_epi_original_D21$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("LPS WT", "LPS iKO")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D21_",celltype_of_interest,".png"), all_vln_p, width = 4, scale = 1)
+```
+
+```{r}
+gene_of_interest <- "Krt8"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_original_D21)){
+    exp_data <- GetAssayData(plosa_epi_original_D21, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_original_D21$injury_genotype,
+               celltype = plosa_epi_original_D21$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("LPS WT", "LPS iKO")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D21_",celltype_of_interest,".png"), all_vln_p, width = 4, scale = 1)
+```
+
+
+```{r}
+gene_of_interest <- "Fgfr2"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+```{r}
+gene_of_interest <- "Spry2"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+
+```{r}
+gene_of_interest <- "Axin2"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+
+```{r}
+gene_of_interest <- "Cldn18"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+```{r}
+gene_of_interest <- "Areg"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+```{r}
+gene_of_interest <- "Ccnd1"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+
+```{r}
+gene_of_interest <- "Cdk6"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+
+```{r}
+gene_of_interest <- "Ctgf"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+
+```{r}
+gene_of_interest <- "Cdk1"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+```{r}
+gene_of_interest <- "Cenpa"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  if (gene %in% rownames(plosa_epi_w_transfer_D7)){
+    exp_data <- GetAssayData(plosa_epi_w_transfer_D7, assay = "SCT", slot = "data")[gene,]
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+  } else {
+    return()
+  }
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+
+
+### Cell cycle scoring
+```{r}
+s.genes <- homologene::human2mouse(cc.genes$s.genes)$mouseGene
+g2m.genes <- homologene::human2mouse(cc.genes$g2m.genes)$mouseGene
+plosa_epi_w_transfer_D7 <- CellCycleScoring(plosa_epi_w_transfer_D7, s.features = s.genes, g2m.features = g2m.genes, nbin = 10)
+plosa_epi_original_D21 <- CellCycleScoring(plosa_epi_original_D21, s.features = s.genes, g2m.features = g2m.genes, nbin = 10)
+```
+
+```{r}
+gene_of_interest <- "G2M.Score"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+    exp_data <- plosa_epi_w_transfer_D7$G2M.Score
+    data.frame(gene = gene,
+               expression = exp_data,
+               injury_genotype = plosa_epi_w_transfer_D7$injury_genotype,
+               celltype = plosa_epi_w_transfer_D7$predicted.id,
+               row.names = names(exp_data)
+    )
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("NT WT", "LPS WT", "NT B1", "LPS B1")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D7_",celltype_of_interest,".png"), all_vln_p, width = 6, scale = 1)
+```
+
+
+```{r}
+gene_of_interest <- "G2M.Score"
+celltype_of_interest <- "AT2 cells"
+
+wide_exp_data <- lapply(gene_of_interest, function(gene){
+  exp_data <- plosa_epi_original_D21$G2M.Score
+  data.frame(gene = gene,
+             expression = exp_data,
+             injury_genotype = plosa_epi_original_D21$injury_genotype,
+             celltype = plosa_epi_original_D21$predicted.id,
+             row.names = names(exp_data)
+  )
+}) %>% do.call(rbind, .)
+
+
+all_vln_p <- ggplot(wide_exp_data %>% filter(celltype == celltype_of_interest),
+                    aes(x = ordered(injury_genotype, c("LPS WT", "LPS iKO")),
+                        fill = injury_genotype,
+                        y = expression)) +
+        geom_violin(scale = "width") +
+        geom_point(aes(x = injury_genotype), position=position_jitterdodge(dodge.width = 0.55)) +
+        ylab("Expression") +
+        scale_fill_manual(values = color_scanpy_default[1:4], name = "Condition") +
+        theme(axis.text = element_text(color = "black"),
+              panel.background = element_rect(fill = "transparent", colour = "black"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.x = element_blank()
+        ) +
+        ggtitle(paste0(gene_of_interest, " in ", celltype_of_interest, " - D21"))
+all_vln_p
+
+dir.create("./data/b1/figures/violin/", recursive = TRUE)
+ggsave(paste0("./data/b1/figures/violin/", gene_of_interest, "_D21_",celltype_of_interest,".png"), all_vln_p, width = 4, scale = 1)
+```
+```{r}
+wide_exp_data$injury_genotype <- as.factor(wide_exp_data$injury_genotype)
+
+wide_exp_data %>% group_by(injury_genotype) %>% summarize(mean = mean(expression)*1000, sd = sd(expression)*1000)
+
+t.test(wide_exp_data %>% filter(injury_genotype == "LPS WT") %>% select(expression),
+       wide_exp_data %>% filter(injury_genotype == "LPS iKO") %>% select(expression))
+```

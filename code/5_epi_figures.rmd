@@ -1,0 +1,386 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 4
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data_labeled <- readRDS("./data/b1/b1_labeled_epithelium.rds")
+```
+
+
+```{r}
+DimHeatmap(epi_data_labeled, reduction = "pca", dims = 1:10, cells = 500, balanced = TRUE)
+```
+
+## Stop here for now - integrate Zemans data, and possibly the dropseq - look at only AT2?
+
+```{r}
+subcelltypes_plt <- DimPlot(epi_data_labeled, group.by = "celltype") +
+  umap_theme() +
+  scale_colour_manual(values = color_category_20) +
+  ggtitle("Cluster")
+
+injury_plt <- DimPlot(epi_data_labeled, group.by = "injury") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Treatment")
+
+genotype_plt <- DimPlot(epi_data_labeled, group.by = "genotype") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/epi_UMAP.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+b1_at2_only <- subset(epi_data_labeled, genotype == "B1" & celltype == "AT2")
+wt_at2_only <- subset(epi_data_labeled, genotype == "WT" & celltype == "AT2")
+at2_only <- subset(epi_data_labeled, celltype == "AT2")
+```
+
+```{r}
+# Positive FC == higher in LPS
+at2_b1_only_nt_vs_LPS <- FindMarkers(subset(epi_data_labeled, genotype == "B1" & celltype == "AT2"), group.by = "injury", "LPS", "NT", test.use = "MAST")
+write.xlsx(at2_b1_only_nt_vs_LPS, "./data/b1/figures/prelim_DE/AT2_B1_only_NT_vs_LPS.xlsx", rowNames = TRUE, overwrite = TRUE)
+
+```
+
+```{r}
+# Positive FC == higher in LPS
+at2_wt_only_nt_vs_LPS <- FindMarkers(subset(epi_data_labeled, genotype == "WT" & celltype == "AT2"), group.by = "injury", "LPS", "NT", test.use = "MAST")
+write.xlsx(at2_wt_only_nt_vs_LPS, "./data/b1/figures/prelim_DE/AT2_WT_only_NT_vs_LPS.xlsx", rowNames = TRUE, overwrite = TRUE)
+```
+
+```{r}
+# Positive FC == higher in B1
+at2_lps_b1_vs_wt <- FindMarkers(subset(at2_only, injury == "LPS"), group.by = "genotype", "B1", "WT", test.use = "MAST")
+write.xlsx(at2_lps_b1_vs_wt, "./data/b1/figures/prelim_DE/AT2_LPS_only_B1_vs_WT.xlsx", rowNames = TRUE, overwrite = TRUE)
+```
+
+```{r}
+at2_nt_b1_vs_wt <- FindMarkers(subset(at2_only, injury == "NT"), group.by = "genotype", "B1", "WT", test.use = "MAST")
+write.xlsx(at2_nt_b1_vs_wt, "./data/b1/figures/prelim_DE/AT2_NT_only_B1_vs_WT.xlsx", rowNames = TRUE, overwrite = TRUE)
+```
+
+```{r}
+VlnPlot(b1_at2_only, group.by = "injury", features = "Hspa1b")
+VlnPlot(at2_only, group.by = "injury", features = "Malt1", split.by = "genotype")
+```
+```{r}
+FeaturePlot(epi_data_labeled, c("Sftpc", "Ager", "Itgb1"))
+```
+
+```{r}
+FeaturePlot(epi_data_labeled, features = c("Sftpc", "Ager", "Itgb1"))
+```
+
+
+```{r}
+epi_data_labeled$condition <- paste0(epi_data_labeled$genotype, " - ", epi_data_labeled$injury)
+```
+
+```{r}
+subcelltypes_plt <- ggplot() + umap_theme() +
+  ggrastr::rasterise(geom_point(data = epi_data_labeled, aes(x = x, y = y, color = celltype), size = .1), dpi = 600) +
+  scale_colour_manual(name = "", values = color_category_20, guide = guide_legend(override.aes = list(size=3), order = 1)) +
+  theme(aspect.ratio=1,
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        panel.background = element_rect(fill = "transparent", colour = "black"),
+        plot.background = element_rect(color = "transparent", fill = "transparent"),
+        legend.background = element_rect(color = "transparent", fill = "transparent")) +
+  new_scale_color() +
+  ggtitle("Cell type") +
+  xlab("UMAP1") + ylab("UMAP2")
+subcelltypes_plt
+
+condition_plt <- ggplot() + umap_theme() +
+  ggrastr::rasterise(geom_point(data = epi_data_labeled, aes(x = x, y = y, color = condition), size = .1), dpi = 600) +
+  scale_colour_manual(name = "", values = color_scanpy_default, guide = guide_legend(override.aes = list(size=3), order = 1)) +
+  theme(aspect.ratio=1,
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=12),
+        panel.background = element_rect(fill = "transparent", colour = "black"),
+        plot.background = element_rect(color = "transparent", fill = "transparent"),
+        legend.background = element_rect(color = "transparent", fill = "transparent")
+  ) +
+  new_scale_color() +
+  ggtitle("Condition") +
+  xlab("UMAP1") + ylab("UMAP2")
+condition_plt
+
+
+ggsave("./data/b1/figures/epi_UMAP_celltype.pdf",
+       gridExtra::grid.arrange(egg::set_panel_size(p=subcelltypes_plt, width=unit(7, "cm"), height=unit(7, "cm"))),
+       dpi = 300, bg = "transparent",
+       width=unit(5, "cm"), height=unit(5, "cm"))
+
+ggsave("./data/b1/figures/epi_UMAP_condition.pdf",
+       gridExtra::grid.arrange(egg::set_panel_size(p=condition_plt, width=unit(7, "cm"), height=unit(7, "cm"))),
+       dpi = 300, bg = "transparent",
+       width=unit(5, "cm"), height=unit(5, "cm"))
+
+
+```
+
+
+```{r}
+cell_type_order <- levels(epi_data_labeled$celltype)
+epi_data_labeled$celltype <- ordered(epi_data_labeled$celltype, rev(cell_type_order))
+marker_genes <- c(
+  "Hopx", "Aqp5", #AT1
+  "Sftpa1", "Sftpc", # AT2
+  "Foxj1", "Dynlrb2", # Cilliated
+  "Scgb1a1", "Scgb3a2" # Secretory
+)
+
+marker_dots <- DotPlot(epi_data_labeled, group.by = "celltype", features = marker_genes, dot.scale = 9) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "italic")) +
+  scale_color_distiller(palette = "Blues", direction = 1) +
+  xlab("Gene") +
+  ylab("Cell type")
+
+epi_data_labeled$celltype <- ordered(epi_data_labeled$celltype, cell_type_order)
+marker_dots
+ggsave("./data/b1/figures/epi_dotplot_markers.pdf", marker_dots, width = 6, height = 4.5)
+```
+
+
+
+```{r}
+prop.table(table(epi_data_labeled$celltype, epi_data_labeled$condition), margin = 2) * 100
+```
+
+```{r}
+at2_only$injury <- ordered(as.factor(at2_only$injury), c("NT", "LPS"))
+at2_only$genotype <- ordered(as.factor(at2_only$genotype), c("WT", "B1"))
+```
+
+```{r}
+vln_abca3 <- VlnPlot(at2_only, group.by = "injury", features = "Abca3", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+vln_abca3
+ggsave("./data/b1/figures/vln_at2_only_Abca3.pdf", vln_abca3, width = 5, height = 5)
+```
+
+```{r}
+vln_Hspa1b <- VlnPlot(at2_only, group.by = "injury", features = "Hspa1b", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+vln_Hspa1b
+ggsave("./data/b1/figures/vln_at2_only_Hspa1b.pdf", vln_Hspa1b, width = 5, height = 5)
+```
+
+
+```{r}
+vln_Atf3 <- VlnPlot(at2_only, group.by = "injury", features = "Atf3", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+vln_Atf3
+ggsave("./data/b1/figures/vln_at2_only_Atf3.pdf", vln_Atf3, width = 5, height = 5)
+```
+
+```{r}
+vln_Lamp3 <- VlnPlot(at2_only, group.by = "injury", features = "Lamp3", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+vln_Lamp3
+ggsave("./data/b1/figures/vln_at2_only_Lamp3.pdf", vln_Lamp3, width = 5, height = 5)
+```
+
+```{r}
+vln_Aqp5 <- VlnPlot(at2_only, group.by = "injury", features = "Aqp5", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+vln_Aqp5
+ggsave("./data/b1/figures/vln_at2_only_Aqp5.pdf", vln_Aqp5, width = 5, height = 5)
+```
+
+```{r}
+vln_Ager <- VlnPlot(at2_only, group.by = "injury", features = "Ager", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+vln_Ager
+ggsave("./data/b1/figures/vln_at2_only_Ager.pdf", vln_Ager, width = 5, height = 5)
+```
+
+```{r}
+# Calculate all distances based on the first 20 principal components
+#d <- dist(epi_data_labeled@reductions[["pca"]]@cell.embeddings[,1:20], method = "euclidean")
+d <- dist(t(GetAssayData(epi_data_labeled)[VariableFeatures(epi_data_labeled),]), method = "euclidean")
+
+# Convert to data-frame and drop self-comparisons
+d_df <- melt(as.matrix(d), varnames = c("row", "col")) %>% filter(value != 0)
+```
+```{r}
+wt_nt_cellnames <- colnames(epi_data_labeled)[epi_data_labeled$genotype == "WT" & epi_data_labeled$injury == "NT"]
+wt_lps_cellnames <- colnames(epi_data_labeled)[epi_data_labeled$genotype == "WT" & epi_data_labeled$injury == "LPS"]
+
+ko_nt_cellnames <- colnames(epi_data_labeled)[epi_data_labeled$genotype == "B1" & epi_data_labeled$injury == "NT"]
+ko_lps_cellnames <- colnames(epi_data_labeled)[epi_data_labeled$genotype == "B1" & epi_data_labeled$injury == "LPS"]
+
+# d_wt <- dist(epi_data_labeled@reductions[["pca"]]@cell.embeddings[epi_data_labeled$genotype == "WT",1:20], method = "euclidean")
+# d_ko <- dist(epi_data_labeled@reductions[["pca"]]@cell.embeddings[epi_data_labeled$genotype == "B1",1:20], method = "euclidean")
+
+wt_nt_vs_lps_dist <- d_df[d_df$row %in% wt_nt_cellnames & d_df$col %in% wt_lps_cellnames, 'value']
+
+mean(wt_nt_vs_lps_dist)
+sd(wt_nt_vs_lps_dist)
+
+ko_nt_vs_lps_dist <- d_df[d_df$row %in% ko_nt_cellnames & d_df$col %in% ko_lps_cellnames, 'value']
+mean(ko_nt_vs_lps_dist)
+sd(ko_nt_vs_lps_dist)
+
+t.test(wt_nt_vs_lps_dist, ko_nt_vs_lps_dist)
+```
+
+
+```{r}
+mouse_nfkb_mod2 <- list(c("Tnfsf13b","Ccl5","Ccl17","Gm2564","Ccl22","Cxcl10","Cxcl2","Cxcl1","Ifng","Il1a","Il1b","Il1rn","Il6","Il10","Il12b","Il12a","Il23a","Ebi3","Lta","Ltb","Ccl12","Ccl4","Tnf","Tnfsf10","Tnfsf15","Cd80","Ccr5","Ccr7","Tnfrsf9","Cd3g","Cr2","Cd38","Cd40","Cd48","Cd83","Cd86","Slc3a2","Tnfrsf4","Fcgrt","Fcer2a","H2-M3","Il2ra","B2m","Nod2","Pglyrp1","Tlr2","Tlr9","Trem1","Cfb","C3","Psmb9","Tap1","Tapbp","Cd44","Eng","Fn1","Selp","Vcam1","C4b","Lbp","F3","Plau","Cyp7b1","Ptgs2","Fth1","Gclc","Gclm","Hsp90aa1","Senp2","Sod1","Sod2","Nqo1","Abca1","Adora2a","Scnn1a","Oprd1","Egfr","Erbb2","Olr1","Abcb4","Ptafr","Abcb1a","Ager","Pycard","Bax","Bcl2a1a","Bcl2a1b","Bcl2a1d","Bcl2l1","Bcl2","Bcl2l11","Cd274","Bnip3","Casp4","Cflar","Fas","Fasl","Ier3","Traf1","Traf2","Xiap","Inhba","Angpt1","Blnk","Bmp2","Bmp4","Calca","Fstl3","Csf3","Csf2","Csf1","Mdk","Spp1","Pdgfb","Pigf","Penk","Kitl","Vegfc","Tnfaip3","Tnip3","Ar","Bcl3","Myb","Myc","Rel","Cebpd","E2f3","Gata3","Hif1a","Hoxa9","Irf1","Irf2","Irf4","Irf7","Nfkbia","Nfkbie","Junb","Lef1","Creb3","Nfkbiz","Nfkb2","Nfkb1","Nr4a2","Trp53","Spi1","Relb","Snai1","Stat5a","Tfec","Yy1","Aicda","Amacr","Arfrp1","Ass1","Bace1","Btk","Ctsb","Cdk6","Chil1","Dnase1l2","Lipg","St8sia1","Mmp9","Gstp1","Gstp2","Hmox1","Hsd11b2","Lyz2","Lyz1","Mthfr","Mylk","Pim1","Plk3","Pik3ca","Prkaca","Prkcd","Plcd1","Ptpn1","St6gal1","Nuak2","Sat1","Tert","Tgm1","Tgm2","Pafah2","Upp1","Asph","Afp","Amh","Apobec2","Apoe","Brca2","Col1a2","Ccnd1","Ccnd2","Slc11a2","Edn1","Epha1","F8","Gadd45b","Gnai2","Lgals3","Hmgn1","Lamb2","Lcn2","S100a4","Serpinb1a","Mbp","Slc16a1","Tnip1","Psme1","Psme2","Prf1","Ppargc1b","Pomc","Pten","Rbbp4","Serpine2","S100a6","Sh3bgrl","Skp2","Sdc4","Slc6a6","Kcnk5","Ticam1","Trpc1","Cyp27b1","Vim"))
+
+mouse_nfkb_var <- list(mouse_nfkb_mod2[[1]][mouse_nfkb_mod2[[1]] %in% VariableFeatures(epi_data_labeled)])
+
+epi_data_labeled <- AddModuleScore(epi_data_labeled, mouse_nfkb_var, name = "nf_kb_score", nbin = 10)
+```
+
+```{r}
+epi_data_labeled$injury <- ordered(as.factor(epi_data_labeled$injury), c("NT", "LPS"))
+epi_data_labeled$genotype <- ordered(as.factor(epi_data_labeled$genotype), c("WT", "B1"))
+```
+
+```{r}
+vln_at2_nfkb <- VlnPlot(subset(epi_data_labeled, celltype == "AT2"), group.by = "injury", features = "nf_kb_score1", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "plain")) +
+        ggtitle("NF-kB score")
+vln_at2_nfkb
+ggsave("./data/b1/figures/vln_at2_only_nf_kb.pdf", vln_at2_nfkb, width = 5, height = 5)
+```
+
+
+```{r}
+
+epi_data_labeled$celltype.condition <- paste0(epi_data_labeled$celltype, " - ", epi_data_labeled$injury)
+epi_data_labeled$celltype.condition <- ordered(as.factor(epi_data_labeled$celltype.condition), c("AT1 - NT",
+                                                                                                 "AT1 - LPS",
+                                                                                                 "AT2 - NT",
+                                                                                                 "AT2 - LPS"
+))
+
+```
+
+```{r}
+epi_at2_at1 <- subset(epi_data_labeled, celltype %in% c("AT2", "AT1"))
+```
+
+```{r}
+VlnPlot(epi_data_labeled, group.by = "celltype.condition", features = "Col4a3", split.by = "genotype")
+VlnPlot(epi_data_labeled, group.by = "celltype.condition", features = "Aqp5", split.by = "genotype")
+VlnPlot(epi_data_labeled, group.by = "celltype.condition", features = "Hopx", split.by = "genotype")
+VlnPlot(epi_data_labeled, group.by = "celltype.condition", features = "Abca3", split.by = "genotype")
+VlnPlot(epi_data_labeled, group.by = "celltype.condition", features = "Sftpc", split.by = "genotype")
+
+```
+
+```{r}
+vln_at2_at1_Aqp5 <- VlnPlot(epi_at2_at1, group.by = "celltype.condition", features = "Aqp5", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+vln_at2_at1_Aqp5
+ggsave("./data/b1/figures/vln_plosa_at2_at1_clusters_Aqp5.pdf", vln_at2_at1_Aqp5, width = 5, height = 5)
+
+```
+
+```{r}
+vln_at2_at1_Ager <- VlnPlot(epi_at2_at1, group.by = "celltype.condition", features = "Ager", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+vln_at2_at1_Ager
+ggsave("./data/b1/figures/vln_plosa_at2_at1_clusters_Ager.pdf", vln_at2_at1_Ager, width = 5, height = 5)
+
+```
+
+```{r}
+vln_at2_at1_Abca3 <- VlnPlot(epi_at2_at1, group.by = "celltype.condition", features = "Abca3", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+vln_at2_at1_Abca3
+ggsave("./data/b1/figures/vln_plosa_at2_at1_clusters_Abca3.pdf", vln_at2_at1_Abca3, width = 5, height = 5)
+```
+
+
+```{r}
+vln_at2_at1_Hopx <- VlnPlot(epi_at2_at1, group.by = "celltype.condition", features = "Hopx", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "plain"))
+vln_at2_at1_Hopx
+ggsave("./data/b1/figures/vln_plosa_at2_at1_clusters_Hopx.pdf", vln_at2_at1_Hopx, width = 5, height = 5)
+```
+
+```{r}
+vln_at2_at1_nfkb <- VlnPlot(epi_at2_at1, group.by = "celltype.condition", features = "nf_kb_score1", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "plain")) +
+        ggtitle("NF-kB score")
+vln_at2_at1_nfkb
+ggsave("./data/b1/figures/vln_plosa_at2_at1_clusters_nf_kb.pdf", vln_at2_at1_nfkb, width = 5, height = 5)
+```
+
+```{r}
+vln_at2_at1_Malt1 <- VlnPlot(epi_at2_at1, group.by = "celltype.condition", features = "Malt1", split.by = "genotype") +
+        scale_fill_manual(values = color_scanpy_default) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
+              plot.title = element_text(face = "italic"))
+
+ggsave("./data/b1/figures/vln_plosa_at2_at1_clusters_Malt1.pdf", vln_at2_at1_Malt1, width = 5, height = 5)
+```

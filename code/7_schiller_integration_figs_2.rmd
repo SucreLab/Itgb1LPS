@@ -1,0 +1,307 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 1/19/22
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+#opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 14
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data_combined_all <- readRDS("./data/b1/20211216_schiller_plosa_integrated.rds")
+plosa_epi_w_transfer <- readRDS("./data/b1/b1_labeled_epithelium_lab_transfer.rds")
+```
+
+```{r}
+plosa_epi_w_transfer$injury_genotype <- paste0(plosa_epi_w_transfer$injury, " ", plosa_epi_w_transfer$genotype)
+epi_data_combined_all$injury_genotype <- paste0(epi_data_combined_all$injury, " ", epi_data_combined_all$genotype)
+```
+
+```{r}
+cell_shape_genes <- c("Crip2","Sptbn1","Msn","Myh9","Tjp1","Igfbp7","Emp2","Ahnak","Slc9a3r2","Krt7","Errfi1","Myl12a","Jup","Myl12b","Ager","Akap13","Tpm4","H2-D1","Calm1","Arl4c","Ctnna1","Mprip","Cd9","Rap1a","Cfl2","Rock1","Rgs16","Ctnnd1","Tmod3","Krt8","Cldn3","Sptan1","Fnbp1l","Plec","Dynlrb2","Tppp3","Sh3glb1","Ehd2","Tpm1","Rin2","Cldn18","Pdlim1","Dlc1","Ssh2","Add3","Lmna","Dnm2","Lcp1","Cldn4")
+differentiation <- c("Sparc","Csrp1","Bhlhe40","Nkx2-1")
+ecm <- c("Sec14l3","Timp3","Col4a1","Esam","Col4a2","Bcam","Col12a1","Cd47","Icam1","Col6a1","Rpsa")
+proliferation <- c("Areg","Cyr61","Cd74","Ybx1","Zfp36l1","Gnai2","Spred1","Ppp1r2","Hnrnpk","Hdac7","Cav2","Rerg","Rgcc")
+cell_survival <- c("Phlda1","Mcl1","Ier3","Ets2","Cirbp")
+```
+
+```{r}
+genes_concat <- c(cell_shape_genes, differentiation, ecm, proliferation, cell_survival)
+```
+```{r}
+DoHeatmap(plosa_epi_w_transfer, group.by = "injury_genotype", features = genes_concat, assay = "RNA", slot = "data")
+```
+
+```{r}
+
+DotPlot(plosa_epi_w_transfer, group.by = "injury_genotype", features = genes_concat) + coord_flip()
+
+
+```
+
+```{r}
+avg_expression <- AverageExpression(subset(plosa_epi_w_transfer, celltype == "AT2"),
+                                    group.by = "injury_genotype", features = genes_concat)
+```
+
+```{r}
+genes_concat
+avg_expression_wide <- melt(avg_expression$RNA)
+```
+
+```{r}
+avg_expression_rownorm <- t(apply(avg_expression$SCT, 1, function(x)(x-min(x))/(max(x)-min(x))))
+
+avg_expression_wide <- melt(log1p(avg_expression$SCT))
+avg_expression_wide$zscore <- (avg_expression_wide$value - mean(avg_expression_wide$value))/sd(avg_expression_wide$value)
+```
+
+
+
+```{r}
+zscore_heatmap <- ggplot(avg_expression_wide, aes(x = Var2, y = ordered(Var1, rev(genes_concat)), fill= zscore)) +
+        geom_tile() +
+        theme(axis.title = element_blank())
+
+rownorm_heatmap <- ggplot(melt(avg_expression_rownorm), aes(x = Var2, y = ordered(Var1, rev(genes_concat)), fill= value)) +
+        geom_tile() +
+        theme(axis.title = element_blank())
+
+ggsave("./data/b1/figures/heatmap_zscore_norm.png", zscore_heatmap, width = 4, height = 8.5)
+ggsave("./data/b1/figures/heatmap_rownorm.png", rownorm_heatmap, width = 4, height = 8.5)
+
+```
+
+```{r}
+library(RColorBrewer)
+my_colors <- colorRampPalette(PurpleAndYellow())
+```
+
+```{r}
+
+rownorm_heatmap_diverging <- ggplot(melt(avg_expression_rownorm), aes(x = Var2, y = ordered(Var1, rev(genes_concat)), fill= value)) +
+        geom_tile() +
+        theme(axis.title = element_blank()) +
+        scale_fill_gradientn(colors = PurpleAndYellow())
+rownorm_heatmap_diverging
+
+ggsave("./data/b1/figures/heatmap_rownorm_diverging.png", rownorm_heatmap_diverging, width = 4, height = 8.5)
+
+```
+
+```{r}
+pheatmap::pheatmap(avg_expression$SCT, scale = "row", cluster_rows = FALSE)
+```
+
+
+
+Split UMAPs
+```{r}
+plosa_epi_w_transfer$condition <- paste0(plosa_epi_w_transfer$genotype, " - ", plosa_epi_w_transfer$injury)
+```
+```{r}
+condition_list <- rev(unique(plosa_epi_w_transfer$condition))
+
+for (condition_idx in seq_along(unique(plosa_epi_w_transfer$condition))){
+  gplot_out <- ggplot() + umap_theme() +
+    ggrastr::rasterise(geom_point(data = plosa_epi_w_transfer, aes(x = x, y = y), color = "lightgrey", size = .1), dpi = 600) +
+    theme(aspect.ratio=1,
+          legend.text=element_text(size=12),
+          legend.title=element_text(size=12),
+          panel.background = element_rect(fill = "transparent", colour = "black"),
+          plot.background = element_rect(color = "transparent", fill = "transparent"),
+          legend.background = element_rect(color = "transparent", fill = "transparent")) +
+    ggrastr::rasterise(geom_point(data = subset(plosa_epi_w_transfer, condition == condition_list[condition_idx]),
+                                  aes(x = x, y = y), color = color_scanpy_default[condition_idx], size = .1), dpi = 600) +
+    ggtitle(condition_list[condition_idx]) +
+    xlab("UMAP1") + ylab("UMAP2")
+
+
+  ggsave(paste0("./data/b1/figures/schiller_merge_epi_UMAP_", condition_list[condition_idx], ".pdf"),
+         gridExtra::grid.arrange(egg::set_panel_size(p=gplot_out, width=unit(7, "cm"), height=unit(7, "cm"))),
+         dpi = 300, bg = "transparent",
+         width=unit(6, "cm"), height=unit(5, "cm"))
+
+}
+
+```
+
+
+```{r}
+
+celltype_order <- c("activated AT2", "AT2 cells", "Krt8 ADI", "AT1 cells", "activated ciliated cells", "activated club cells", "basal cells", "ciliated cells", "club cells", "goblet cells", "proliferation")
+### WT- unchallenged, iKO-unchallenged, WT-LPS, then iKO-LPS
+#New -  NT WT LPS WT  NT iKO LPS iKO
+condition_order <- c("NT WT", "LPS WT", "NT B1", "LPS B1")
+condition_order_names <- c("NT WT", "LPS WT", "NT iKO", "LPS iKO")
+
+condition_factor <- ordered(factor(plosa_epi_w_transfer$injury_genotype), c("NT WT", "LPS WT", "NT B1", "LPS B1"))
+levels(condition_factor) <- c("NT WT", "LPS WT", "NT iKO", "LPS iKO")
+
+cell_ident_df <- data.frame(condition = condition_factor,
+                            cluster = plosa_epi_w_transfer$predicted.id)
+
+
+prop_celltypes <- round(prop.table(table(cell_ident_df$condition, cell_ident_df$cluster), 1) * 100, 1)
+
+stacked_bar <- ggplot(melt(prop_celltypes), aes(y=value, x=Var1, color = ordered(Var2, celltype_order), fill = ordered(Var2, celltype_order))) +
+        geom_bar(position="stack", stat="identity") +
+        xlab("Condition") +
+        ylab("% of cells") +
+        labs(fill = "Cluster", color = "Cluster", group = "Cluster") +
+        scale_colour_manual(aesthetics = c("color", "fill"), values=color_category_20) +
+        theme(legend.key = element_blank(),
+              legend.text = element_markdown(size=14),
+              legend.title = element_text(size=14),
+              axis.text = element_text(color = "black"),
+              axis.text.x  = element_text(size=14),
+              axis.text.y = element_text(size=14),
+              axis.title.x = element_text(size=14),
+              axis.title.y = element_text(size=14),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "white"),
+              aspect.ratio = 1.2
+        ) +
+        scale_x_discrete(expand = c(.01, .01)) +
+        scale_y_continuous(expand = c(.01,.01)) +
+        coord_fixed(0.05)
+
+
+stacked_bar
+
+ggsave("./data/b1/figures/b1_proportion_epi_stacked_bar_v4.pdf", stacked_bar)
+```
+
+
+
+######## !! Heatmap
+
+
+```{r}
+cell_shape_genes <- c("Crip2","Sptbn1","Msn","Myh9","Tjp1","Igfbp7","Emp2","Ahnak","Slc9a3r2","Krt7","Errfi1","Myl12a","Jup","Myl12b","Ager","Akap13","Tpm4","H2-D1","Calm1","Arl4c","Ctnna1","Mprip","Cd9","Rap1a","Cfl2","Rock1","Rgs16","Ctnnd1","Tmod3","Krt8","Cldn3","Sptan1","Fnbp1l","Plec","Dynlrb2","Tppp3","Sh3glb1","Ehd2","Tpm1","Rin2","Cldn18","Pdlim1","Dlc1","Ssh2","Add3","Lmna","Dnm2","Lcp1","Cldn4")
+differentiation <- c("Sparc","Csrp1","Bhlhe40","Nkx2-1")
+ecm <- c("Sec14l3","Timp3","Col4a1","Esam","Col4a2","Bcam","Col12a1","Cd47","Icam1","Col6a1","Rpsa")
+proliferation <- c("Areg","Cyr61","Cd74","Ybx1","Zfp36l1","Gnai2","Spred1","Ppp1r2","Hnrnpk","Hdac7","Cav2","Rerg","Rgcc")
+cell_survival <- c("Phlda1","Mcl1","Ier3","Ets2","Cirbp")
+```
+
+```{r}
+at2_only <- subset(plosa_epi_w_transfer, celltype == "AT2")
+schiller_merge_at2_only <- subset(plosa_epi_w_transfer, predicted.id %in% c("AT2 cells", "activated AT2"))
+```
+
+```{r}
+# Positive FC == higher in B1
+at2_lps_b1_vs_wt_markers <- FindMarkers(subset(at2_only, injury == "LPS"), group.by = "genotype", "B1", "WT", test.use = "MAST")
+write.xlsx(at2_lps_b1_vs_wt_markers, "./data/b1/figures/prelim_DE/AT2_LPS_only_B1_vs_WT_reduced_dataset.xlsx", rowNames = TRUE, overwrite = TRUE)
+
+# Positive FC == higher in B1
+schiller_at2_lps_b1_vs_wt_markers <- FindMarkers(subset(schiller_merge_at2_only, injury == "LPS"), group.by = "genotype", "B1", "WT", test.use = "MAST")
+write.xlsx(schiller_at2_lps_b1_vs_wt_markers, "./data/b1/figures/prelim_DE/AT2_schiller_merge_LPS_only_B1_vs_WT_reduced_dataset.xlsx", rowNames = TRUE, overwrite = TRUE)
+```
+
+Drop these if using the merged schiller AT2 cells + Activated AT2 dataset.
+
+Col6a1
+Nkx2-1
+Errfi1
+Ager
+Akap13
+Ctnna1
+Tmod3
+Cldn18
+Dlc1
+Lmna
+Zfp36l1
+
+```{r}
+genes_concat <- c(cell_shape_genes, differentiation, ecm, proliferation, cell_survival)
+genes_concat_shillermerge_data <- genes_concat[!genes_concat %in% c("Col6a1", "Nkx2-1", "Errfi1", "Ager", "Akap13", "Ctnna1", "Tmod3", "Cldn18", "Dlc1", "Lmna", "Zfp36l1")]
+```
+
+
+```{r}
+avg_expression <- AverageExpression(schiller_merge_at2_only,
+                                    group.by = "injury_genotype", features = genes_concat_shillermerge_data)
+
+#avg_expression_wide <- melt(avg_expression$RNA)
+avg_expression_rownorm <- t(apply(avg_expression$SCT, 1, function(x)(x-min(x))/(max(x)-min(x))))
+
+avg_expression_wide <- melt(log1p(avg_expression$SCT))
+avg_expression_wide$zscore <- (avg_expression_wide$value - mean(avg_expression_wide$value))/sd(avg_expression_wide$value)
+```
+
+
+```{r}
+zscore_heatmap <- ggplot(avg_expression_wide, aes(x = Var2, y = ordered(Var1, rev(genes_concat)), fill= zscore)) +
+  geom_tile() +
+  theme(axis.title = element_blank())
+
+rownorm_heatmap <- ggplot(melt(avg_expression_rownorm), aes(x = Var2, y = ordered(Var1, rev(genes_concat)), fill= value)) +
+  geom_tile() +
+  theme(axis.title = element_blank())
+
+rownorm_heatmap
+
+ggsave("./data/b1/figures/heatmap_zscore_norm.png", zscore_heatmap, width = 4, height = 8.5)
+ggsave("./data/b1/figures/AT2_w_activated_heatmap_rownorm.png", rownorm_heatmap, width = 4, height = 8.5)
+
+```
+
+```{r}
+library(RColorBrewer)
+my_colors <- colorRampPalette(PurpleAndYellow())
+```
+
+```{r}
+# NT WT LPS WT NT iKO LPS iKO
+condition_order <- c("NT WT", "LPS WT", "NT B1", "LPS B1")
+condition_order_names <- c("NT WT", "LPS WT", "NT iKO", "LPS iKO")
+
+avg_exp_melt <- melt(avg_expression_rownorm)
+avg_exp_melt$Var2 <- as.factor(avg_exp_melt$Var2)
+avg_exp_melt$Var2 <- ordered(avg_exp_melt$Var2, condition_order)
+levels(avg_exp_melt$Var2) <- condition_order_names
+
+rownorm_heatmap_diverging <- ggplot(avg_exp_melt, aes(x = ordered(Var2, rev(condition_order_names)), y = ordered(Var1, genes_concat_shillermerge_data), fill= value)) +
+  geom_tile() +
+  theme(axis.title = element_blank()) +
+  scale_fill_distiller("Relative\nexpression", palette = "GnBu", direction = 1) +
+  #scale_fill_gradientn(colors = PurpleAndYellow()) +
+  coord_flip() +
+  theme(axis.text = element_text(color = "black"),
+        axis.text.x = element_text(angle = 45, hjust=1),
+        aspect.ratio = 0.1,
+        panel.background = element_rect(fill = "transparent", colour = "transparent"),
+        plot.background = element_rect(color = "transparent", fill = "transparent"),
+        legend.background = element_rect(color = "transparent", fill = "transparent"),
+        panel.grid = element_blank(),
+        axis.ticks = element_line(color = "black"),
+        axis.title.y = element_blank(),
+        axis.line.x = element_line(size = 0.5, linetype = "solid", colour = "black"),
+        axis.line.y = element_line(size = 0.5, linetype = "solid", colour = "black"),)
+rownorm_heatmap_diverging
+
+ggsave("./data/b1/figures/AT2_w_activated_heatmap_rownorm.png", rownorm_heatmap_diverging, width = 13, height = 4)
+ggsave("./data/b1/figures/AT2_w_activated_heatmap_rownorm.pdf", rownorm_heatmap_diverging, width = 13, height = 4)
+
+```

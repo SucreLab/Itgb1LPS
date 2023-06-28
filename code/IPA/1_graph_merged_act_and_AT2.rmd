@@ -1,0 +1,158 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 9/2/2022
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+
+N_WORKERS <- 14
+plan("multicore", workers = N_WORKERS)
+options(future.globals.maxSize=21*1024*1024^2)
+RhpcBLASctl::blas_set_num_threads(4)
+RhpcBLASctl::omp_set_num_threads(4)
+
+```
+
+## !! Note !! These pathways are reversed - up is down
+```{r}
+
+pathway_data_lps <- read_tsv("./B1_LPS_v4_no_7639/IPA/plosa_merged_AT2_cells_pathway_enrich_smaller_dataset_LPS_WT_vs_B1.txt", skip = 1)
+pathway_data_lps$`z-score` <- pathway_data_lps$`z-score` * -1
+top10_pathways_lps_up <- pathway_data_lps %>% arrange('-log(p-value)') %>% filter(`z-score` > 0) %>% head(8)
+plot_order_lps_up <- unique(top10_pathways_lps_up$`Ingenuity Canonical Pathways`)
+
+pathway_heatmap_plot_lps_up <- ggplot(top10_pathways_lps_up, aes(fill = `z-score`, y = `-log(p-value)`,
+                           x = ordered(`Ingenuity Canonical Pathways`, plot_order_lps_up %>% rev()))) +
+        geom_col() +
+        coord_flip() +
+        #scale_fill_distiller(palette = "RdBu", direction = -1) +
+        scale_fill_distiller(palette = "YlOrRd", direction = 1) +
+        scale_y_continuous(expand = c(0.005, 0)) +
+        theme(panel.background = element_rect(fill = "transparent", colour = "transparent"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.y = element_blank(),
+              axis.line.x = element_line(size = 0.5, linetype = "solid", colour = "black"),
+              axis.line.y = element_line(size = 0.5, linetype = "solid", colour = "black"),
+              aspect.ratio = 1.8,
+              axis.text.y = element_text(size = 12, color = "black"),
+              plot.margin=grid::unit(c(0,0,0,0), "mm")
+
+        )
+pathway_heatmap_plot_lps_up
+
+ggsave("./data/b1/figures/7E_IPA_heatmap_LPS_iKO_vs_WT_up_MERGED_AT2.pdf", pathway_heatmap_plot_lps_up)
+
+```
+
+
+```{r}
+pathway_data_lps <- read_tsv("./B1_LPS_v4_no_7639/IPA/plosa_merged_AT2_cells_pathway_enrich_smaller_dataset_LPS_WT_vs_B1.txt", skip = 1)
+pathway_data_lps$`z-score` <- pathway_data_lps$`z-score` * -1
+top10_pathways_lps_down <- pathway_data_lps %>% arrange('-log(p-value)') %>% filter(`z-score` < 0) %>% head(8)
+plot_order_lps_down <- unique(top10_pathways_lps_down$`Ingenuity Canonical Pathways`)
+
+pathway_heatmap_plot_lps_down <- ggplot(top10_pathways_lps_down, aes(fill = `z-score`, y = `-log(p-value)`,
+                                                                 x = ordered(`Ingenuity Canonical Pathways`, plot_order_lps_down %>% rev()))) +
+        geom_col() +
+        coord_flip() +
+        #scale_fill_distiller(palette = "RdBu", direction = -1) +
+        scale_fill_distiller(palette = "YlGnBu", direction = 1) +
+        scale_y_continuous(expand = c(0.005, 0)) +
+        theme(panel.background = element_rect(fill = "transparent", colour = "transparent"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.y = element_blank(),
+              axis.line.x = element_line(size = 0.5, linetype = "solid", colour = "black"),
+              axis.line.y = element_line(size = 0.5, linetype = "solid", colour = "black"),
+              aspect.ratio = 1.8,
+              axis.text.y = element_text(size = 12, color = "black"),
+              plot.margin=grid::unit(c(0,0,0,0), "mm")
+
+        )
+pathway_heatmap_plot_lps_down
+
+ggsave("./data/b1/figures/7F_IPA_heatmap_LPS_iKO_vs_WT_down_MERGED_AT2.pdf", pathway_heatmap_plot_lps_down)
+
+```
+
+
+### Untreateed cells
+
+```{r}
+pathway_data_lps <- read_tsv("./B1_LPS_v4_no_7639/IPA/plosa_merged_AT2_cells_pathway_enrich_smaller_dataset_UC_WT_vs_B1.txt", skip = 1)
+pathway_data_lps$`z-score` <- pathway_data_lps$`z-score` * -1
+top10_pathways_lps_up <- pathway_data_lps %>% arrange('-log(p-value)') %>% filter(`z-score` > 0) %>% head(8)
+plot_order_lps_up <- unique(top10_pathways_lps_up$`Ingenuity Canonical Pathways`)
+
+pathway_heatmap_plot_lps_up_uc <- ggplot(top10_pathways_lps_up, aes(fill = `z-score`, y = `-log(p-value)`,
+                                                                 x = ordered(`Ingenuity Canonical Pathways`, plot_order_lps_up %>% rev()))) +
+        geom_col() +
+        coord_flip() +
+        #scale_fill_distiller(palette = "RdBu", direction = -1) +
+        scale_fill_distiller(palette = "YlOrRd", direction = 1) +
+        scale_y_continuous(expand = c(0.005, 0)) +
+        theme(panel.background = element_rect(fill = "transparent", colour = "transparent"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.y = element_blank(),
+              axis.line.x = element_line(size = 0.5, linetype = "solid", colour = "black"),
+              axis.line.y = element_line(size = 0.5, linetype = "solid", colour = "black"),
+              aspect.ratio = 1.8,
+              axis.text.y = element_text(size = 12, color = "black"),
+              plot.margin=grid::unit(c(0,0,0,0), "mm")
+
+        )
+pathway_heatmap_plot_lps_up_uc
+
+ggsave("./data/b1/figures/7C_IPA_heatmap_UC_iKO_vs_WT_up_MERGED_AT2.pdf", pathway_heatmap_plot_lps_up_uc)
+
+```
+
+
+```{r}
+pathway_data_lps <- read_tsv("./B1_LPS_v4_no_7639/IPA/plosa_merged_AT2_cells_pathway_enrich_smaller_dataset_UC_WT_vs_B1.txt", skip = 1)
+pathway_data_lps$`z-score` <- pathway_data_lps$`z-score` * -1
+top10_pathways_lps_down <- pathway_data_lps %>% arrange('-log(p-value)') %>% filter(`z-score` < 0) %>% head(8)
+plot_order_lps_down <- unique(top10_pathways_lps_down$`Ingenuity Canonical Pathways`)
+
+pathway_heatmap_plot_lps_down_uc <- ggplot(top10_pathways_lps_down, aes(fill = `z-score`, y = `-log(p-value)`,
+                                                                     x = ordered(`Ingenuity Canonical Pathways`, plot_order_lps_down %>% rev()))) +
+        geom_col() +
+        coord_flip() +
+        #scale_fill_distiller(palette = "RdBu", direction = -1) +
+        scale_fill_distiller(palette = "YlGnBu", direction = 1) +
+        scale_y_continuous(expand = c(0.005, 0)) +
+        theme(panel.background = element_rect(fill = "transparent", colour = "transparent"),
+              plot.background = element_rect(color = "transparent", fill = "transparent"),
+              legend.background = element_rect(color = "transparent", fill = "transparent"),
+              axis.title.y = element_blank(),
+              axis.line.x = element_line(size = 0.5, linetype = "solid", colour = "black"),
+              axis.line.y = element_line(size = 0.5, linetype = "solid", colour = "black"),
+              aspect.ratio = 1.8,
+              axis.text.y = element_text(size = 12, color = "black"),
+              plot.margin=grid::unit(c(0,0,0,0), "mm")
+
+        )
+pathway_heatmap_plot_lps_down_uc
+
+ggsave("./data/b1/figures/7B_IPA_heatmap_UC_iKO_vs_WT_down_MERGED_AT2.pdf", pathway_heatmap_plot_lps_down_uc)
+
+```

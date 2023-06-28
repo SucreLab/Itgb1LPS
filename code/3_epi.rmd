@@ -1,0 +1,303 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+#renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 4
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data <- subset(readRDS("./data/b1/no_cd45_celltype_recluster2.rds"), bulk_celltype == "Epithelium")
+epi_data <- epi_data[rownames(epi_data) != "Gm42418",]
+epi_data <- subset(epi_data, HTO_HTO_classification.global != "Doublet")
+```
+
+```{r}
+epi_data <- SCTransform(epi_data, variable.features.n = 2000,
+                         conserve.memory = TRUE, batch_var = "orig.ident",
+                         vars.to.regress = c("percent.mt"),
+                         method = 'glmGamPoi')
+```
+
+```{r}
+epi_data <- cluster_pca_umap(epi_data, dims_umap = 1:15, dims_neighbors = 1:15, k_param = 8, cluster_res = 1.2)
+```
+
+```{r}
+DimPlot(epi_data, group.by = "genotype")
+DimPlot(epi_data, group.by = "injury")
+DimPlot(epi_data, label = TRUE)
+FeaturePlot(epi_data, c("Pdpn", "Ager", "Epcam", "Col4a3"))
+```
+
+```{r}
+FeaturePlot(epi_data, c("Pecam1", "Ager", "Epcam", "Col4a3"))
+```
+
+```{r}
+find_at1_cells <- subset(epi_data, genotype == "WT" & injury == "NT")
+find_at1_cells$special <- ""
+find_at1_cells$special[grep('^AACACGTAGAGGGATA', colnames(find_at1_cells))] <- "yes"
+find_at1_cells$special[grep('^GTTAAGCAGTGAACAT', colnames(find_at1_cells))] <- "yes"
+find_at1_cells$special[grep('^AGAATAGAGACCTTTG', colnames(find_at1_cells))] <- "yes"
+find_at1_cells$special[grep('^AGACGTTAGGCAGGTT', colnames(find_at1_cells))] <- "yes"
+find_at1_cells$special[grep('^AGCGTATTCTCCGGTT', colnames(find_at1_cells))] <- "yes"
+find_at1_cells$special[grep('^AGCTCTCAGTGTACCT', colnames(find_at1_cells))] <- "yes"
+find_at1_cells$special[grep('^GGATTACGTACCGCTG', colnames(find_at1_cells))] <- "yes"
+find_at1_cells$special[grep('^TGATTTCTCTCCGGTT', colnames(find_at1_cells))] <- "yes"
+find_at1_cells$special[grep('^TGCACCTAGTCTTGCA', colnames(find_at1_cells))] <- "yes"
+```
+
+```{r}
+grep('^AACACGTAGAGGGATA', colnames(epi_data))
+grep('^GTTAAGCAGTGAACAT', colnames(epi_data))
+grep('^AGAATAGAGACCTTTG', colnames(epi_data))
+grep('^AGACGTTAGGCAGGTT', colnames(epi_data))
+grep('^AGCGTATTCTCCGGTT', colnames(epi_data))
+grep('^AGCTCTCAGTGTACCT', colnames(epi_data))
+grep('^GGATTACGTACCGCTG', colnames(epi_data))
+grep('^TGATTTCTCTCCGGTT', colnames(epi_data))
+grep('^TGCACCTAGTCTTGCA', colnames(epi_data))
+```
+
+
+
+```{r}
+marker_genes <- c("Epcam",
+                  "Sftpa1", "Sftpc", # AT2
+                  "Hopx", "Aqp5", "Col4a3", #AT1
+                  "Foxj1", "Dynlrb2", # Cilliated
+                  "Mdk", "Mki67", # Primordial
+                  "Scgb1a1", "Scgb3a2", # Secretory
+                  "Cdkn1a", "Cldn4", # Transitional?
+                  "Ascl1", "Scg5", #Neuroendocrine
+                  "Pecam1", "Col1a1", "Ptprc" # Common Doublet
+)
+DotPlot(epi_data, features = marker_genes) + theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+```{r}
+epi_data_sub <- subset(epi_data, idents = c(8, 13), invert = TRUE)
+```
+
+```{r}
+#epi_data_sub <- cluster_pca_umap(epi_data_sub, dims_umap = 1:15, dims_neighbors = 1:15, k_param = 8, cluster_res = 1.2)
+epi_data_sub <- cluster_pca_umap(epi_data_sub, dims_umap = 1:20, dims_neighbors = 1:20, k_param = 8, cluster_res = 1.2)
+```
+
+```{r}
+DimPlot(epi_data_sub, group.by = "genotype")
+DimPlot(epi_data_sub, group.by = "injury")
+DimPlot(epi_data_sub, label = TRUE)
+FeaturePlot(epi_data_sub, c("Pdpn", "Ager", "Pecam1", "Col4a3"))
+```
+
+```{r}
+DotPlot(epi_data_sub, features = marker_genes) + theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+
+
+
+```{r}
+plan("multiprocess", workers = N_WORKERS)
+filename <- "./data/b1/20211203_b1_epi_cluster_markers.rds"
+if (!file.exists(filename)) {
+  markers <- parallelFindAllMarkers(epi_data_sub)
+  saveRDS(markers, filename)
+} else {
+  markers <- readRDS(filename)
+}
+
+wb_markers_names <- levels(Idents(epi_data_sub))
+
+wb_markers <- createWorkbook()
+for (idx in seq_along(markers)){
+  addWorksheet(wb_markers, wb_markers_names[idx])
+  writeData(wb_markers, wb_markers_names[idx], markers[[idx]], rowNames = TRUE)
+}
+saveWorkbook(wb_markers, file = "./data/b1/20211203_epi_cluster_markers.xlsx", overwrite = TRUE)
+
+```
+
+
+
+```{r}
+data_relabel <- epi_data_sub
+data_relabel$louvain <- Idents(data_relabel)
+data_relabel$celltype <- Idents(data_relabel)
+
+idxes <- levels(data_relabel$celltype)
+labels <- rep("", length(levels(data_relabel$celltype)))
+labels[idxes %in% c(13)] <- "AT1"
+labels[idxes %in% c(0, 1, 2, 3, 5, 7, 8, 9, 11)] <- "AT2"
+labels[idxes %in% c(4, 6, 12)] <- "Ciliated"
+labels[idxes %in% c(10)] <- "Secretory"
+labels
+
+levels(data_relabel$celltype) <- labels
+
+```
+
+```{r}
+DimPlot(data_relabel, group.by = "celltype")
+```
+
+```{r}
+data_relabel$celltype <- ordered(as.factor(data_relabel$celltype), c("AT1", "AT2", "Ciliated", "Secretory"))
+```
+
+```{r}
+saveRDS(data_relabel, "./data/b1/b1_labeled_epithelium.rds", compress = "bzip2")
+data_relabel <- readRDS("./data/b1/b1_labeled_epithelium.rds")
+```
+
+## Stop here for now - integrate Zemans data, and possibly the dropseq - look at only AT2?
+
+```{r}
+subcelltypes_plt <- DimPlot(data_relabel, group.by = "celltype") +
+  umap_theme() +
+  scale_colour_manual(values = color_category_20) +
+  ggtitle("Cluster")
+
+injury_plt <- DimPlot(data_relabel, group.by = "injury") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Treatment")
+
+genotype_plt <- DimPlot(data_relabel, group.by = "genotype") +
+  umap_theme() +
+  scale_colour_manual(values = color_scanpy_default) +
+  ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/epi_UMAP.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+subcelltypes_plt <- DimPlot(subset(data_relabel, genotype == "WT"), group.by = "celltype") +
+        umap_theme() +
+        scale_colour_manual(values = color_category_20) +
+        ggtitle("Cluster")
+
+injury_plt <- DimPlot(subset(data_relabel, genotype == "WT"), group.by = "injury") +
+        umap_theme() +
+        scale_colour_manual(values = color_scanpy_default) +
+        ggtitle("Treatment")
+
+genotype_plt <- DimPlot(subset(data_relabel, genotype == "WT"), group.by = "genotype") +
+        umap_theme() +
+        scale_colour_manual(values = color_scanpy_default) +
+        ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/epi_UMAP_WT_ONLY.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+subcelltypes_plt <- DimPlot(subset(data_relabel, genotype == "B1"), group.by = "celltype") +
+        umap_theme() +
+        scale_colour_manual(values = color_category_20) +
+        ggtitle("Cluster")
+
+injury_plt <- DimPlot(subset(data_relabel, genotype == "B1"), group.by = "injury") +
+        umap_theme() +
+        scale_colour_manual(values = color_scanpy_default) +
+        ggtitle("Treatment")
+
+genotype_plt <- DimPlot(subset(data_relabel, genotype == "B1"), group.by = "genotype") +
+        umap_theme() +
+        scale_colour_manual(values = color_scanpy_default) +
+        ggtitle("Genotype")
+
+subcelltypes_plt + injury_plt + genotype_plt
+ggsave("./data/b1/figures/epi_UMAP_KO_ONLY.png", subcelltypes_plt + injury_plt + genotype_plt + plot_layout(ncol = 3), scale = 1.8)
+```
+
+```{r}
+VlnPlot(at2_only, group.by = "injury", features = c("Hspa1b", "Malt1", "Areg"), split.by = "genotype")
+ggsave("./data/b1/figures/vln_AT2_only_differences.png", VlnPlot(at2_only, group.by = "injury", features = c("Hspa1b", "Malt1", "Areg"), split.by = "genotype"))
+```
+
+
+```{r}
+epi_marker_umap <- DimPlot(data, group.by = "louvain", label = TRUE) +
+  umap_theme() +
+  scale_colour_manual(values = color_category_20) +
+  ggtitle("Cluster")
+
+subcelltypes_plt + epi_marker_umap
+
+ggsave("./data/figures/epi_UMAP_markers.png", subcelltypes_plt + epi_marker_umap, scale = 1)
+```
+
+```{r}
+writeAnnData <- function(seurat_obj, filename){
+  anndata::AnnData(X = t(GetAssayData(seurat_obj, slot = "data", assay = "SCT")),
+                   var = data.frame(gene = rownames(seurat_obj),
+                                    row.names = rownames(seurat_obj)),
+                   obs = data.frame(celltype = as.character(seurat_obj$celltype),
+                                    louvain = as.character(seurat_obj$louvain),
+                                    injury = as.character(seurat_obj$injury),
+                                    genotype = as.character(seurat_obj$genotype),
+                                    #sex = as.character(seurat_obj$sex),
+                                    #seq_run = as.character(seurat_obj$orig.ident),
+                                    row.names = colnames(seurat_obj)),
+                   obsm = list(X_umap = matrix(Embeddings(seurat_obj, reduction = "umap"), ncol = 2))
+  )$write_h5ad(filename, compression = "gzip")
+
+  # Need to fix the uns to be a Pandas Series dtype=category for colors
+  # Not necessary? On linux it saves as categorical by default.
+  #  system(paste0("python -c \"from anndata import read_h5ad
+  #import sys
+  #adata = read_h5ad(sys.argv[1])
+  #for i in adata.obs.keys():
+  #    if not i in ['latent_time']:
+  #        adata.obs[i] = adata.obs[i].astype('category')
+  #adata.write_h5ad(sys.argv[1], compression = 'gzip')\" ", filename))
+}
+
+filename <- "./b1_epi_cellxgene_data.h5ad"
+if (!file.exists(filename)) { # Create if doesn't exist
+  writeAnnData(data_relabel, filename)
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

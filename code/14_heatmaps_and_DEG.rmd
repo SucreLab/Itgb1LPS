@@ -1,0 +1,81 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 1/19/22
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+#opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 14
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+epi_data_combined_all <- readRDS("./data/b1/20211216_schiller_plosa_integrated.rds")
+plosa_epi_w_transfer_D7 <- readRDS("./data/b1/b1_labeled_epithelium_lab_transfer.rds")
+plosa_epi_original_D21 <- readRDS("./data/b1/D21_b1_labeled_epithelium_lab_transfer.rds")
+```
+
+```{r}
+plosa_epi_w_transfer_D7$injury_genotype <- paste0(plosa_epi_w_transfer_D7$injury, " ", plosa_epi_w_transfer_D7$genotype)
+```
+
+```{r}
+
+plosa_epi_w_transfer_D7_at2_lps <- subset(plosa_epi_w_transfer_D7, predicted.id == "AT2 cells" & injury == "LPS")
+plosa_epi_w_transfer_D7_at2merge_lps <- subset(plosa_epi_w_transfer_D7, predicted.id %in% c("AT2 cells", "activated AT2") & injury == "LPS")
+
+plosa_epi_w_transfer_D7_at2_pbs <- subset(plosa_epi_w_transfer_D7, predicted.id == "AT2 cells" & injury == "NT")
+plosa_epi_w_transfer_D7_at2merge_pbs <- subset(plosa_epi_w_transfer_D7, predicted.id %in% c("AT2 cells", "activated AT2") & injury == "NT")
+
+
+
+
+deg_lps_at2_iko_vs_wt <- FindMarkers(plosa_epi_w_transfer_D7_at2_lps, ident.1 = "B1", ident.2 = "WT", group.by = "genotype", test.use = "MAST")
+deg_pbs_at2_iko_vs_wt <- FindMarkers(plosa_epi_w_transfer_D7_at2_pbs, ident.1 = "B1", ident.2 = "WT", group.by = "genotype", test.use = "MAST")
+
+deg_lps_at2merge_iko_vs_wt <- FindMarkers(plosa_epi_w_transfer_D7_at2merge_lps, ident.1 = "B1", ident.2 = "WT", group.by = "genotype", test.use = "MAST")
+deg_pbs_at2merge_iko_vs_wt <- FindMarkers(plosa_epi_w_transfer_D7_at2merge_pbs, ident.1 = "B1", ident.2 = "WT", group.by = "genotype", test.use = "MAST")
+
+
+
+comparisons_names <- c("AT2 LPS - iKO vs Ctrl", "AT2 PBS - iKO vs Ctrl", "AT2 w Act LPS - iKO vs Ctrl", "AT2 w Act PBS - iKO vs Ctrl")
+comparisons <- list(deg_lps_at2_iko_vs_wt,
+                    deg_pbs_at2_iko_vs_wt,
+                    deg_lps_at2merge_iko_vs_wt,
+                    deg_pbs_at2merge_iko_vs_wt
+)
+names(comparisons) <- comparisons_names
+
+
+wb_markers_names <- comparisons_names
+wb_markers <- createWorkbook()
+for (idx in seq_along(wb_markers_names)){
+  addWorksheet(wb_markers, wb_markers_names[idx])
+  writeData(wb_markers, wb_markers_names[idx], comparisons[[idx]], rowNames = TRUE)
+}
+saveWorkbook(wb_markers, file = "./data/20220607_AT2_D7_iKO_DEG.xlsx", overwrite = TRUE)
+
+```
+
+```{r}
+testplt <- VlnPlot(plosa_epi_w_transfer_D7_at2merge_pbs, features = "Cyr61", group.by = "genotype")
+ggsave("./data/test.png", testplt)
+```
+
+

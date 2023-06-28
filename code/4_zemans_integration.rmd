@@ -1,0 +1,305 @@
+---
+title: "scSEQ analysis of the Itgb1 KO with LPS"
+author: Nick Negretti
+date: 3/05/21
+output: rmarkdown::github_document
+---
+
+# Analysis of the lung epithelium
+
+## Load libraries and helper functions
+```{r, results="hide", message = FALSE}
+setwd("~/code/plosa_b1_scseq")
+#renv::activate()
+source("./helper_functions/globals.R")
+source("./helper_functions/libraries.R")
+
+opts_knit$set(root.dir = getwd())
+
+source("./helper_functions/trajectory.R")
+source("./helper_functions/cluster.R")
+source("./helper_functions/colors.R")
+source("./helper_functions/brackets.R")
+source("./helper_functions/heatmaps.R")
+N_WORKERS <- 4
+plan("multiprocess", workers = N_WORKERS)
+```
+
+```{r}
+pct_mt_high <- 15
+pct_mt_low <- 0.1
+min_nfeature <- 700
+# Construct futures, start calculation
+#1 - raw
+#2 - filt
+
+Zemans_Epi_NT_Adult_1r2 %<-% {Read10X("./data/zemans/Expt_1_Control_Mouse_Non-Type_II_lung_epithelial_cells_technical_rep_2/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_Epi_NT_Adult_1r2") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+Zemans_Epi_NT_Adult_1r1 %<-% {Read10X("./data/zemans/Expt_1_Control_Mouse_Non_Type_II_lung_epithelial_cells_technical_rep_1/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_Epi_NT_Adult_1r1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+Zemans_AT2_NT_Adult_1r1 %<-% {Read10X("./data/zemans/Expt_1_Control_Mouse_Type_II_Alveolar_cells/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_AT2_NT_Adult_1r1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+Zemans_AT2_LPS_Adult_1r1 %<-% {Read10X("./data/zemans/Expt_1_Injured_Mouse_LPS_Type_II_Alveolar_cells_technical_rep_1/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_AT2_LPS_Adult_1r1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+Zemans_AT2_LPS_Adult_1r2 %<-% {Read10X("./data/zemans/Expt_1_Injured_Mouse_LPS_Type_II_Alveolar_cells_technical_rep_2/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_AT2_LPS_Adult_1r2") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+Zemans_Epi_NT_Adult_2r1 %<-% {Read10X("./data/zemans/Expt_2_Control_Mouse_Non-Type_II_Lung_epithelial_cells_technical_rep_1/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_Epi_NT_Adult_2r1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+Zemans_Epi_NT_Adult_2r2 %<-% {Read10X("./data/zemans/Expt_2_Control_Mouse_Non-Type_II_Lung_Epithelial_cells_technical_rep_2/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_Epi_NT_Adult_2r2") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+Zemans_AT2_NT_Adult_2r1 %<-% {Read10X("./data/zemans/Expt_2_Control_Mouse_Type_II_Alveolar_cells/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_AT2_NT_Adult_2r1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+Zemans_AT2_LPS_Adult_2r1 %<-% {Read10X("./data/zemans/Expt_2_Injured_Mouse_LPS_Type_II_Alveolar_cells_technical_rep_1/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_AT2_LPS_Adult_2r1") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+Zemans_AT2_LPS_Adult_2r2 %<-% {Read10X("./data/zemans/Expt_2_Injured_Mouse_LPS_Type_II_Alveolar_cells_technical_rep_2/filtered_feature_bc_matrix") %>%
+        CreateSeuratObject(counts = ., project = "Zemans_AT2_LPS_Adult_2r2") %>%
+        PercentageFeatureSet(., pattern = "^mt-", col.name = "percent.mt") %>%
+        subset(., subset = percent.mt < pct_mt_high & percent.mt > pct_mt_low & nFeature_RNA > min_nfeature)}
+
+```
+
+```{r}
+# Limit memory usage by running SoupX on load, reduces number of matricies in RAM
+# The SoupX function also drops Gm42418
+
+# Construct list from futures, block until resolved
+expression_objs_zemans <- list(
+        Zemans_Epi_NT_Adult_1r2 = Zemans_Epi_NT_Adult_1r2,
+        Zemans_Epi_NT_Adult_1r1 = Zemans_Epi_NT_Adult_1r1,
+        Zemans_AT2_NT_Adult_1r1 = Zemans_AT2_NT_Adult_1r1,
+        Zemans_AT2_LPS_Adult_1r1 = Zemans_AT2_LPS_Adult_1r1,
+        Zemans_AT2_LPS_Adult_1r2 = Zemans_AT2_LPS_Adult_1r2,
+        Zemans_Epi_NT_Adult_2r1 = Zemans_Epi_NT_Adult_2r1,
+        Zemans_Epi_NT_Adult_2r2 = Zemans_Epi_NT_Adult_2r2,
+        Zemans_AT2_NT_Adult_2r1 = Zemans_AT2_NT_Adult_2r1,
+        Zemans_AT2_LPS_Adult_2r1 = Zemans_AT2_LPS_Adult_2r1,
+        Zemans_AT2_LPS_Adult_2r2 = Zemans_AT2_LPS_Adult_2r2
+)
+```
+
+# Make sure we didn't duplicate anything
+```{r}
+# Prints true if all unique
+length(unique(expression_objs_zemans)) == length(expression_objs_zemans)
+names(expression_objs_zemans)[duplicated(expression_objs_zemans)]
+```
+
+```{r}
+expression_objs_zemans_merge <- Reduce(function(x,y){merge(x,y)}, expression_objs_zemans)
+expression_objs_zemans_merge <- PercentageFeatureSet(expression_objs_zemans_merge, pattern = "^mt-", col.name = "percent.mt")
+
+expression_objs_zemans_merge$cellsort <- "Unassigned"
+expression_objs_zemans_merge$injury <- "Unassigned"
+expression_objs_zemans_merge$cellsort <- sapply(str_split(expression_objs_zemans_merge$orig.ident, "_"), function(x){x[2]})
+expression_objs_zemans_merge$injury <- sapply(str_split(expression_objs_zemans_merge$orig.ident, "_"), function(x){x[3]})
+
+saveRDS(expression_objs_zemans_merge, "./data/b1/zemans_data_merged.rds", compress = "bzip2")
+```
+
+
+```{r}
+expression_objs_zemans_merge <- SCTransform(expression_objs_zemans_merge, variable.features.n = 2000,
+                                           conserve.memory = TRUE, batch_var = "orig.ident",
+                                           vars.to.regress = c("percent.mt"),
+                                           method = 'glmGamPoi')
+```
+
+```{r}
+expression_objs_zemans_merge <- cluster_pca_umap(expression_objs_zemans_merge, dims_umap = 1:25, dims_neighbors = 1:25, cluster_res = 1.2)
+```
+
+```{r}
+saveRDS(expression_objs_zemans_merge, "./data/b1/zemans_data_merged_sct.rds", compress = "bzip2")
+
+```
+
+```{r}
+DimPlot(expression_objs_zemans_merge, label = TRUE)
+DimPlot(expression_objs_zemans_merge, group.by = "injury")
+DimPlot(expression_objs_zemans_merge, group.by = "cellsort")
+```
+
+## Grab controls (only) and plot together to see what happens.
+
+```{r}
+plosa_epi <- readRDS("./data/b1/b1_labeled_epithelium.rds")
+zemans_control_data <- subset(expression_objs_zemans_merge, injury == "NT")
+zemans_control_data$lab <- "zemans"
+plosa_control_data <- subset(plosa_epi, injury == "NT" & genotype == "WT")
+plosa_control_data$lab <- "plosa"
+DefaultAssay(zemans_control_data) <- "RNA"
+DefaultAssay(plosa_control_data) <- "RAW_COUNTS"
+```
+```{r}
+plosa_control_data <- DietSeurat(plosa_control_data, assays = "RAW_COUNTS")
+plosa_control_data <- RenameAssays(plosa_control_data, RAW_COUNTS = "RNA")
+merged_control_data <- merge(DietSeurat(zemans_control_data, assays = "RNA"), plosa_control_data)
+```
+```{r}
+merged_control_data <- SCTransform(merged_control_data, variable.features.n = 2000,
+                                            conserve.memory = TRUE, batch_var = "orig.ident",
+                                            vars.to.regress = c("percent.mt"),
+                                            method = 'glmGamPoi')
+merged_control_data <- cluster_pca_umap(merged_control_data, dims_umap = 1:25, dims_neighbors = 1:25, cluster_res = 1.2)
+```
+
+```{r}
+a <- DimPlot(merged_control_data, group.by = "lab")
+b <- DimPlot(merged_control_data, group.by = "celltype")
+c <- DimPlot(merged_control_data, group.by = "genotype")
+d <- DimPlot(merged_control_data, group.by = "injury")
+fplt <- FeaturePlot(merged_control_data, c("Sftpc", "Ager", "Foxj1", "Pdpn"))
+a + b + c + d & theme(aspect.ratio = 1)
+ggsave("./data/b1/figures/prelim_zemans/only_control_nointegration.png", a + b + c + d & theme(aspect.ratio = 1), scale = 1.5)
+```
+
+
+# Try SCT Integration workflow
+```{r}
+epi_data_list <- SplitObject(merged_control_data, split.by = "lab")
+epi_data_list <- lapply(X = epi_data_list, FUN = SCTransform)
+features <- SelectIntegrationFeatures(object.list = epi_data_list, nfeatures = 2000)
+epi_data_list <- PrepSCTIntegration(object.list = epi_data_list, anchor.features = features)
+epi_anchors <- FindIntegrationAnchors(object.list = epi_data_list, normalization.method = "SCT",
+                                         anchor.features = features)
+epi_data_combined <- IntegrateData(anchorset = epi_anchors, normalization.method = "SCT")
+```
+
+```{r}
+epi_data_combined <- cluster_pca_umap(epi_data_combined, dims_umap = 1:25, dims_neighbors = 1:25, cluster_res = 1.2)
+```
+
+```{r}
+a <- DimPlot(epi_data_combined, group.by = "lab")
+b <- DimPlot(epi_data_combined, group.by = "celltype")
+c <- DimPlot(epi_data_combined, group.by = "genotype")
+d <- DimPlot(epi_data_combined, group.by = "injury")
+fplt <- FeaturePlot(epi_data_combined, c("Sftpc", "Ager", "Foxj1", "Pdpn"))
+a + b + c + d & theme(aspect.ratio = 1)
+ggsave("./data/b1/figures/prelim_zemans/only_control_yesintegration.png", a + b + c + d & theme(aspect.ratio = 1), scale = 1.5)
+```
+
+
+## Grab all data and plot together to see what happens.
+
+```{r}
+plosa_epi <- readRDS("./data/b1/b1_labeled_epithelium.rds")
+zemans_data <- expression_objs_zemans_merge
+zemans_data$lab <- "zemans"
+plosa_data <- plosa_epi
+plosa_data$lab <- "plosa"
+DefaultAssay(zemans_data) <- "RNA"
+DefaultAssay(plosa_data) <- "RAW_COUNTS"
+```
+```{r}
+plosa_data <- DietSeurat(plosa_data, assays = "RAW_COUNTS")
+plosa_data <- RenameAssays(plosa_data, RAW_COUNTS = "RNA")
+merged_data <- merge(DietSeurat(zemans_data, assays = "RNA"), plosa_data)
+```
+```{r}
+merged_data <- SCTransform(merged_data, variable.features.n = 2000,
+                                   conserve.memory = TRUE, batch_var = "orig.ident",
+                                   vars.to.regress = c("percent.mt"),
+                                   method = 'glmGamPoi')
+merged_data <- cluster_pca_umap(merged_data, dims_umap = 1:25, dims_neighbors = 1:25, cluster_res = 1.2)
+```
+
+```{r}
+a <- DimPlot(merged_data, group.by = "lab")
+b <- DimPlot(merged_data, group.by = "celltype")
+c <- DimPlot(merged_data, group.by = "genotype")
+d <- DimPlot(merged_data, group.by = "injury")
+fplt <- FeaturePlot(merged_data, c("Fbln5", "Ager", "Top2a", "Fn1", "Pdgfb"))
+a + b + c + d & theme(aspect.ratio = 1)
+ggsave("./data/b1/figures/prelim_zemans/all_nointegration.png", a + b + c + d & theme(aspect.ratio = 1), scale = 1.5)
+ggsave("./data/b1/figures/prelim_zemans/all_gex_nointegration.png", fplt & theme(aspect.ratio = 1), scale = 1.5)
+```
+
+
+# Try SCT Integration workflow
+```{r}
+epi_data_list <- SplitObject(merged_data, split.by = "lab")
+epi_data_list <- lapply(X = epi_data_list, FUN = SCTransform)
+features <- SelectIntegrationFeatures(object.list = epi_data_list, nfeatures = 2000)
+epi_data_list <- PrepSCTIntegration(object.list = epi_data_list, anchor.features = features)
+epi_anchors <- FindIntegrationAnchors(object.list = epi_data_list, normalization.method = "SCT",
+                                      anchor.features = features)
+epi_data_combined_all <- IntegrateData(anchorset = epi_anchors, normalization.method = "SCT")
+```
+
+```{r}
+epi_data_combined_all <- cluster_pca_umap(epi_data_combined_all, dims_umap = 1:25, dims_neighbors = 1:25, cluster_res = 1.2)
+
+```
+
+```{r}
+a <- DimPlot(epi_data_combined_all, group.by = "lab")
+b <- DimPlot(epi_data_combined_all, group.by = "celltype")
+c <- DimPlot(epi_data_combined_all, group.by = "genotype")
+d <- DimPlot(epi_data_combined_all, group.by = "injury")
+fplt <- FeaturePlot(epi_data_combined_all, c("Fbln5", "Ager", "Top2a", "Fn1", "Pdgfb"))
+a + b + c + d & theme(aspect.ratio = 1)
+ggsave("./data/b1/figures/prelim_zemans/all_yesintegration.png", a + b + c + d & theme(aspect.ratio = 1), scale = 1.5)
+ggsave("./data/b1/figures/prelim_zemans/all_gex_yesintegration.png", fplt & theme(aspect.ratio = 1), scale = 1.5)
+```
+```{r}
+FeaturePlot(epi_data_combined_all, c("Fbln5", "Ager", "Top2a", "Fn1", "Pdgfb", "Lyz1", "Lyz2"))
+```
+
+
+```{r}
+epi_data_combined_all_wt_only <- subset(epi_data_combined_all, genotype == "WT" | lab == "zemans")
+epi_data_combined_all_ko_only <- subset(epi_data_combined_all, genotype == "B1" | lab == "zemans")
+```
+
+```{r}
+a <- DimPlot(epi_data_combined_all_wt_only, group.by = "lab")
+b <- DimPlot(epi_data_combined_all_wt_only, group.by = "celltype")
+c <- DimPlot(epi_data_combined_all_wt_only, group.by = "genotype")
+d <- DimPlot(epi_data_combined_all_wt_only, group.by = "injury")
+fplt <- FeaturePlot(epi_data_combined_all_wt_only, c("Fbln5", "Ager", "Top2a", "Fn1", "Pdgfb"))
+a + b + c + d & theme(aspect.ratio = 1)
+ggsave("./data/b1/figures/prelim_zemans/all_yesintegration_wt_only.png", a + b + c + d & theme(aspect.ratio = 1), scale = 1.5)
+ggsave("./data/b1/figures/prelim_zemans/all_gex_yesintegration_wt_only.png", fplt & theme(aspect.ratio = 1), scale = 1.5)
+```
+
+```{r}
+a <- DimPlot(epi_data_combined_all_ko_only, group.by = "lab")
+b <- DimPlot(epi_data_combined_all_ko_only, group.by = "celltype")
+c <- DimPlot(epi_data_combined_all_ko_only, group.by = "genotype")
+d <- DimPlot(epi_data_combined_all_ko_only, group.by = "injury")
+fplt <- FeaturePlot(epi_data_combined_all_ko_only, c("Fbln5", "Ager", "Top2a", "Fn1", "Pdgfb"))
+a + b + c + d & theme(aspect.ratio = 1)
+ggsave("./data/b1/figures/prelim_zemans/all_yesintegration_b1_only.png", a + b + c + d & theme(aspect.ratio = 1), scale = 1.5)
+ggsave("./data/b1/figures/prelim_zemans/all_gex_yesintegration_b1_only.png", fplt & theme(aspect.ratio = 1), scale = 1.5)
+```
+```{r}
+saveRDS(epi_data_combined_all, "./data/b1/20211209_b1ko_data_zemans_data_integrated.rds", compress = "bzip2")
+```
